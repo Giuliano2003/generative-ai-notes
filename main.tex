@@ -180,7 +180,7 @@ token per token (in modo autoregressivo).
 \newpage
 \section{Autoregressive language models}
 Nei modelli auto-regressivi, la chain rule, ci aiuta questo perchè come abbiamo detto, il nostro problema di prima è computazionalmente intrattabile,
-questo perchè se io volessi calcolare la distribuzione di probabilità congiunta $p(x_{1:L})$ senza usare la chain rule, saresti vincolato dall'assioma fondamentale della probabilità, ovvero che la somma di tutte le probabilità su tutti gli eventi possibili dello spazio campionario deve valere $1$:
+questo perchè se io volessi calcolare la distribuzione di probabilità congiunta $p(x_{1:L})$ senza usare la chain rule, sarei vincolato dall'assioma fondamentale della probabilità, ovvero che la somma di tutte le probabilità su tutti gli eventi possibili dello spazio campionario deve valere $1$:
 cioè:
 \begin{equation}
     \sum_{x_{1:L} \in V^L} p(x_{1:L}) = 1
@@ -226,4 +226,94 @@ e indichiamo in modo formale, ma con un piccolo abuso di notazione (perchè p in
 
 \newpage
 Un \textbf{modello di linguaggio autoregressivo} è un modello in cui ciascuna distribuzione condizionata $p(x_i \mid x_{1:i-1})$ può essere calcolata in modo efficiente (ad esempio, utilizzando una rete neurale feedforward).
+
+Un'altra cosa interessante da dire è come vengono calcolate queste probabilità:
+\begin{equation}
+    P(A | B) = \frac{P(A \cap B)}{P(B)}
+\end{equation}
+Questa è la legge della probabilità condizionata.
+Una volta detto questo, a questi modelli di testo, servono dei grandi \textbf{corpus di dati di addrestamento}, cioè dati nella forma:
+\begin{quote}
+Il gatto mangia la mela. \\
+Il bambino mangia la mela. \\
+Il gatto mangia la carne. \\
+Il cane mangia la mela. \\
+\end{quote}
+Questi dati servono al modello a calcolare (stimare) queste probabilità condizionate.
+
+Perchè supponiamo che:
+\begin{itemize}
+    \item Evento B :  appare il contesto $\text{"mangia, la"}$
+    \item Evento A :  la parola successiva è $\text{"mela"}$
+    \item Evento $A \cap B$: appare la sequenza completa $\text{"mangia, la, mela"}$
+\end{itemize}
+Nel corpus, la probabilità di osservare una determinata sequenza è stimata dividendo il suo conteggio per il numero totale $N$ di token nel testo:
+\begin{itemize}
+    \item $P(\text{mangia, la, mela}) = \frac{\text{count}(\text{mangia, la, mela})}{N}$
+    \item $P(\text{mangia, la}) = \frac{\text{count}(\text{mangia, la})}{N}$
+\end{itemize}
+Applicando la formula della probabilità condizionata, il totale del corpus $N$ si semplifica a numeratore e denominatore:
+\begin{equation}
+    P(\text{mela} \mid \text{mangia, la}) = \frac{\frac{\text{count}(\text{mangia, la, mela})}{N}}{\frac{\text{count}(\text{mangia, la})}{N}} = \frac{\text{count}(\text{mangia, la, mela})}{\text{count}(\text{mangia, la})}
+\end{equation}
+
+
+\subsection{N-gram models}
+
+In un \textbf{modello n-gram}, la predizione di un token $x_i$ dipende esclusivamente dagli ultimi \textbf{$n - 1$ caratteri} (o token) $x_{i-(n-1):i-1}$, anziché dall'intera storia precedente:
+\[
+p(x_i \mid x_{1:i-1}) = p(x_i \mid x_{i-(n-1):i-1})
+\]
+
+Ad esempio, un modello a \textbf{trigrammi} ($n = 3$) definisce la probabilità come:
+\[
+p(\text{cheese} \mid \text{the, mouse, ate, the}) = p(\text{cheese} \mid \text{ate, the})
+\]
+
+Queste probabilità vengono calcolate in base alla frequenza con cui i vari n-grammi (ad es. \textit{ate the mouse} e \textit{ate the cheese}) compaiono all'interno di un ampio corpus di testo, opportunamente bilanciate tramite tecniche di \textit{smoothing} (ad es. il \textit{Kneser-Ney smoothing}) per evitare l'overfitting.
+
+L'addestramento dei modelli n-gram sui dati è estremamente \textbf{economico dal punto di vista computazionale} e altamente scalabile. Di conseguenza, questi modelli sono stati addestrati su enormi quantità di testo. Per esempio, Brants et al. (2007) hanno addestrato un modello a 5-grammi su 2 mila miliardi di token per la traduzione automatica.
+A titolo di confronto, GPT-3 è stato addestrato su sole 300 miliardi di token.
+
+Tuttavia, i modelli \textbf{n-gram presentano limiti fondamentali}. Si consideri il seguente prefisso:
+\begin{quote}
+\textit{Stanford has a new course on large language models. It will be taught by \underline{\hspace{1cm}}}
+\end{quote}
+
+\begin{itemize}
+    \item Se $n$ è troppo piccolo, il modello sarà incapace di catturare dipendenze a lungo raggio e la parola successiva non potrà dipendere dal contesto iniziale (\textit{Stanford}),
+    quindi se $n$ è troppo piccolo si ha poco contesto.
+    \item Se $n$ è troppo grande, diventa \textbf{statisticamente irrealizzabile} ottenere stime accurate delle probabilità, poiché quasi tutte le sequenze lunghe ma ragionevoli appaiono $0$ volte anche nei corpors più grandi:
+    \[
+    \text{count}(\text{Stanford, has, a, new, course, on, large, language, models}) = 0
+    \]
+    Quindi il numeratore diventa 0, e tutta la condizionata diventa 0.
+    Questo problema è la \textbf{sparsità dei dati}.
+\end{itemize}
+
+Di conseguenza, i modelli linguistici basati su n-grammi sono stati storicamente limitati a compiti come il riconoscimento vocale e la traduzione automatica, dove il segnale acustico o il testo sorgente fornivano informazioni sufficienti da rendere accettabile la sola modellazione delle \textbf{dipendenze locali}.
+
+\subsection{Neural language models}
+
+Un importante passo avanti per i modelli linguistici è stato l'introduzione delle reti neurali. Bengio et al. (2003) hanno introdotto i modelli linguistici neurali, in cui la probabilità $p(x_i \mid x_{i-(n-1):i-1})$ viene modellata tramite una rete neurale:
+\[
+p(\text{cheese} \mid \text{ate, the}) = \text{some-neural-network}(\text{ate, the})
+\]
+
+La rete neurale sarà fatta in modo tale da avere tanti neuroni di output, tante quanto sono le parole del dizionario, successivamente, ogni neurone (tramite la softmax) caccierà
+una probabilità.
+Il valore restituito dal neurone associato a "cheese" corrisponderà a $P(\text{cheese} \mid \text{ate, the})$
+
+Si noti che la lunghezza del contesto è ancora limitata da $n$, ma ora è \textbf{statisticamente fattibile} stimare i modelli per valori di $n$ molto più grandi rispetto ai classici n-grammi .
+
+A questo punto, la sfida principale era rappresentata dal fatto che l'addestramento delle reti neurali risultava molto più \textbf{costoso dal punto di vista computazionale}. Gli autori addestrarono un modello su soli 14 milioni di parole, dimostrando che superava i modelli ad n-grammi addestrati sulla stessa quantità di dati. Tuttavia, poiché i modelli ad n-grammi erano maggiormente scalabili e i dati non costituivano un collo di bottiglia, questi ultimi hanno continuato a dominare per almeno un altro decennio .
+
+A partire dal 2003, si sono avuti altri due sviluppi chiave nella modellazione linguistica neurale :
+
+\begin{itemize}
+    \item \textbf{Recurrent Neural Networks (RNN):} comprese le \textit{Long Short-Term Memory} (LSTM), hanno permesso alla distribuzione condizionata di un token $x_i$ di dipendere dall'\textbf{intero contesto} $x_{1:i-1}$ (praticamente $n = \infty$), sebbene fossero difficili da addestrare.
+    
+    \item \textbf{Transformers:} un'architettura più recente (sviluppata per la traduzione automatica nel 2017) che è ritornata ad avere una lunghezza del contesto fissa $n$, ma con una maggiore \textbf{facilitià di addestramento} (sfruttando il parallelismo delle GPU). Inoltre, $n$ può essere reso ``sufficientemente grande'' per molte applicazioni (ad esempio, GPT-3 utilizza $n = 2048$) .
+\end{itemize}
+\section{Perplexity}
 \end{document}
