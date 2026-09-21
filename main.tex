@@ -137,9 +137,9 @@ ma ci sono da considerare anche i limiti che questa ha ora:
 In questo capitolo ci dedicheremo ai \textbf{Language Models}.
 I \textbf{Language Models} un'applicazione della \textbf{Generative AI} nel dominio del testo, quindi \textbf{modelli} specializzati nella creazione di testi.
 \section{Cos'è un Language Models ?}
-La classica definizione di un \textbf{Language Models}, è una \textbf{distribuzione di probabilità su una sequenza di tokens}.
+La classica definizione di un \textbf{Language Models}, è una \textbf{distribuzione di probabilità su una sequenza di tokens di una lunghezza $L$ fissata}.
 Supponi noi abbiamo un vocabolario $\mathcal{V}$, di un insieme di token.
-A \textbf{language model} $p$ assegna a \textbf{ciascuna} delle sequenze di token del vocabolario $x_1,\dots,x_L \in \mathcal{V}$ una probabilità (un numero fra 0 e 1)
+A \textbf{language model} $p$ assegna a \textbf{ciascuna} delle sequenze di token del vocabolario $x_1,\dots,x_L \in \mathcal{V}^L$ una probabilità (un numero fra 0 e 1)
 \begin{equation}
     p(x_1,\dots,x_L)
 \end{equation} 
@@ -155,6 +155,11 @@ In questo caso L = |$\mathcal{V}$|, ed essendo una distribuzione di probabilità
 \begin{equation}
     \sum_{x_1,\dots,x_L}p(x_1,\dots,x_L) = 1
 \end{equation}
+\begin{warning}{Accort alla lunghezza fissata}
+In questo modello matematico, stiamo considerando che la distribuzione è su una lunghezza fissata, ad esempio se ho $L$ = 3, e considero
+tutte le possibili combinazioni di token, la loro probabilità congiunta dovrà sommare ad 1.
+Cambiando in $L$ = 4, vale lo stesso discorso.
+\end{warning}
 
 
 \textbf{Matematicamente quindi è un oggetto semplice e bello}, ma la semplicità è \textbf{ingannevole} : l'abilità di assegnare probabilità (meaningful) a tutte le sequenze
@@ -188,26 +193,141 @@ cioè:
 Quindi dovrei computare per ogni possibile sequenza del vocabolario fissata una lunghezza la probabilità ed è \textbf{intrattabile}.
 
 La chain rule ci facilità il lavoro perchè io posso trovare un modo per descrivere la probabilità congiunto in un altro modo.
-
 Un modo comune per scrivere la distribuzione congiunta $p(x_{1:L})$ di una sequenza $x_{1:L}$ consiste nell'utilizzare la \textbf{regola della catena della probabilità} (\textit{chain rule of probability}):
 
-\[
-p(x_{1:L}) = p(x_1) p(x_2 \mid x_1) p(x_3 \mid x_1, x_2) \cdots p(x_L \mid x_{1:L-1}) = \prod_{i=1}^{L} p(x_i \mid x_{1:i-1})
-\]
+$$
+p(x_{1:L})
+=
+p(x_1)p(x_2\mid x_1)p(x_3\mid x_1,x_2)\cdots
+p(x_L\mid x_{1:L-1})
+=
+\prod_{i=1}^{L}p(x_i\mid x_{1:i-1})
+$$
 
-Essendo una distribuzione di probabilità deve valere
-\begin{equation}
-    \sum_{(x_1,\dots,x_L \in V^L)}p(x_1,\dots,x_L) = 1 = \sum_{x_1 \in V} \sum_{x_2 \in V} \dots \prod_{i=1}^{L}p(x_i | x_{1:i-1})
-\end{equation}
-Ora c'è da dimostrare che 
-\begin{equation}
-    \sum_{x_1 \in V} \sum_{x_2 \in V} \dots \prod_{i=1}^{L}p(x_i | x_{1:i-1}) = 1
-\end{equation}
-Ma semplicemente posso dire che essendo ogni probabilità condizionata una distribuzione di probabilità, ad esempio fissato $x_1$:
-\begin{equation}
-    \sum_{x_2 \in V}p(x_2 | x_1) = 1
-\end{equation}
-\textbf{Portando dentro ogni sommatoria e applicando (2.7) si ha = 1}.
+dove, per $i=1$, si assume che:
+
+$$
+p(x_1\mid x_{1:0}) = p(x_1).
+$$
+
+Essendo $p(x_{1:L})$ una distribuzione di probabilità, deve valere la condizione di normalizzazione:
+
+$$
+\sum_{x_{1:L}\in\mathcal V^L}p(x_{1:L})=1.
+$$
+
+La notazione
+
+$$
+\sum_{x_{1:L}\in\mathcal V^L}
+$$
+
+equivale a considerare tutte le possibili combinazioni di $x_1,\ldots,x_L$ nel vocabolario $\mathcal V$, e può quindi essere esplicitata come una serie di sommatorie:
+
+$$
+\sum_{x_1\in\mathcal V}
+\sum_{x_2\in\mathcal V}
+\cdots
+\sum_{x_L\in\mathcal V}
+p(x_1,\ldots,x_L)
+=1.
+$$
+
+Sostituendo la regola della catena:
+
+$$
+\sum_{x_1\in\mathcal V}
+\sum_{x_2\in\mathcal V}
+\cdots
+\sum_{x_L\in\mathcal V}
+\prod_{i=1}^{L}p(x_i\mid x_{1:i-1})
+=1.
+$$
+
+\subsubsection{Dimostrazione}
+
+La proprietà fondamentale che utilizziamo è che, fissato un certo contesto $x_{1:i-1}$, la probabilità condizionata $p(x_i\mid x_{1:i-1})$ è una distribuzione di probabilità su $x_i$. Pertanto:
+
+$$
+\boxed{
+\sum_{x_i\in\mathcal V}
+p(x_i\mid x_{1:i-1})=1
+}
+$$
+
+Ad esempio, fissato $x_1$:
+
+$$
+\sum_{x_2\in\mathcal V}p(x_2\mid x_1)=1.
+$$
+
+Consideriamo, per semplicità, $L=3$:
+
+$$
+\sum_{x_1\in\mathcal V}
+\sum_{x_2\in\mathcal V}
+\sum_{x_3\in\mathcal V}
+p(x_1)p(x_2\mid x_1)p(x_3\mid x_1,x_2).
+$$
+
+Partiamo dalla sommatoria più interna:
+
+$$
+\sum_{x_3\in\mathcal V}
+p(x_1)p(x_2\mid x_1)p(x_3\mid x_1,x_2).
+$$
+
+Poiché i primi due fattori non dipendono da $x_3$, possiamo portarli fuori:
+
+$$
+p(x_1)p(x_2\mid x_1)
+\sum_{x_3\in\mathcal V}
+p(x_3\mid x_1,x_2).
+$$
+
+Per la proprietà della distribuzione condizionata:
+
+$$
+\sum_{x_3\in\mathcal V}
+p(x_3\mid x_1,x_2)=1.
+$$
+
+Quindi rimane:
+
+$$
+p(x_1)p(x_2\mid x_1).
+$$
+
+Ripetendo lo stesso ragionamento per $x_2$:
+
+$$
+\sum_{x_2\in\mathcal V}
+p(x_1)p(x_2\mid x_1)
+=
+p(x_1)
+\sum_{x_2\in\mathcal V}p(x_2\mid x_1)
+=
+p(x_1).
+$$
+
+Infine:
+
+$$
+\sum_{x_1\in\mathcal V}p(x_1)=1.
+$$
+
+Pertanto:
+
+$$
+\boxed{
+\sum_{x_{1:L}\in\mathcal V^L}
+\prod_{i=1}^{L}p(x_i\mid x_{1:i-1})
+=1
+}
+$$
+
+La distribuzione congiunta costruita tramite la \textbf{regola della catena} è quindi correttamente normalizzata.
+
 
 Passo da dover gestire uno spazio di dimensione $\vert{}V\vert{}^L$ (esponenziale) a dover fare solo $L$ passaggi, ciascuno su uno spazio di dimensione $\vert{}V\vert{}$ (lineare),
 \textbf{perchè ad ogni passo, dovrò calcolarmi la distribuzione su tutti i token del vocabolario (dato i token precedenti) ed assegnare ad ogni token del vocabolario una probabilità, questo viene fatto per tutti i token della sequenza.}
