@@ -588,6 +588,13 @@ La misurazione della similarità tra il vettore Query $x_n$ e il vettore Key $x_
 \text{Similarity}(x_n, x_m) = x_n^\top x_m
 \end{equation}
 
+Per il vettore \textbf{query}, si usa $x_n$, questo perchè intuitivamente $y_n$ rappresenta il vettore $x_n$, però contestualizzato, e quindi intuitivamente $a_{nm}$ significa:
+\begin{center}
+    \textbf{Quanta attenzione il vettore $x_n$ deve dare al vettore $x_m$}
+\end{center}
+L'output poi sarà il vettore $y_n$
+
+
 Per rispettare i vincoli di non-negatività e somma unitaria \eqref{eq:constraint_nonneg}-\eqref{eq:constraint_sum}, si trasformano i prodotti scalari applicando la funzione \textbf{Softmax} lungo i vettori Key $m$:
 \begin{equation}
 a_{nm} = \frac{\exp\left(x_n^\top x_m\right)}{\sum_{m'=1}^{N} \exp\left(x_n^\top x_{m'}\right)} \label{eq:softmax_attention_basic}
@@ -595,6 +602,8 @@ a_{nm} = \frac{\exp\left(x_n^\top x_m\right)}{\sum_{m'=1}^{N} \exp\left(x_n^\top
 In questo contesto, la funzione Softmax non possiede un'interpretazione probabilistica diretta, ma è impiegata come operatore di normalizzazione riga per riga.
 
 Si definisce questo processo \textbf{Self-Attention} poiché la medesima sequenza di input viene usata per generare Query, Key e Value. Inoltre, poiché la misura di similarità è il prodotto scalare, tale variante prende il nome di \textbf{Dot-Product Self-Attention}.
+
+
 
 \subsection{Formulazione Matriciale Compattata}
 Sia $X \in \mathbb{R}^{N \times D}$ la matrice dei dati di input e $Y \in \mathbb{R}^{N \times D}$ la matrice dei dati di output (la cui riga $n$-esima è $y_n^\top$). L'intera operazione di Self-Attention si esprime in forma matriciale come:
