@@ -612,9 +612,21 @@ Y = \text{Softmax}\left[ X X^\top \right] X
 \end{equation}
 dove l'operatore $\text{Softmax}[L]$ calcola l'esponenziale elemento per elemento della matrice $L \in \mathbb{R}^{N \times N}$ e normalizza in modo indipendente ciascuna riga affinché la somma degli elementi sia pari a 1.
 
-\begin{observation}{Caso Ortogonale}
-Se tutti i vettori token di input $x_1, \dots, x_N$ sono reciprocamente ortogonali ($x_n^\top x_m = 0$ per $n \neq m$), ogni vettore di output si riduce al corrispondente vettore di input, ovvero $y_n = x_n$ per ogni $n = 1, \dots, N$.
-\end{observation}
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{_files/_images/mul1.png}
+\caption{In questa immagine, si vede chiaramente, che facendo la moltiplicazioni fra le due matrici $X$ e $X^T$, si avrà ad esempio che l'elemento in posizione $(1,1)$ sarà $x_1^T x_1$
+successivamente una volta fatto questo per tutti gli elementi, si applica la funzione SOFTMAX, che applica l'esponenziale al prodotto, e normalizza per riga.
+Cioè è chiaramente quello che si fa nell'\textbf{equazione 3.7} per calcolare $a_{nm}$}
+\end{figure}
+
+
+
+
+Successivamente si moltiplica la matrice $A$ per la matrice $X$, quello che esce fuori è la matrice $Y$ dei vettori trasformati, dove la riga $n-esima$ conterrà $y_n^t$
+
+
+\newpage
 
 \section{Parametri di Rete (\textit{Network Parameters})} La formulazione base della Dot-Product Self-Attention soffre di due gravi limitazioni architetturali :
 \begin{enumerate}
@@ -645,9 +657,22 @@ Y = \text{Softmax}\left[ Q K^\top \right] V
 \end{equation}
 in cui $Q K^\top \in \mathbb{R}^{N \times N}$ misura la matrice delle similarità incrociate asimmetriche tra tutti i token Query e Key, e $Y \in \mathbb{R}^{N \times D_v}$.
 
-\begin{observation}{Assorbimento dei Bias}
-Praticamente, le trasformazioni lineari possono includere vettori di bias $b^{(q)}, b^{(k)}, b^{(v)}$. Tali bias vengono implicitamente assorbiti nelle matrici di peso aumentando la matrice dei dati $X$ con una colonna aggiuntiva di valori unitari ($1$), esattamente come avviene nelle reti classiche.
-\end{observation}
+
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.4\textwidth]{_files/_images/mul2.png}
+\caption{Quindi ora, ogni riga di $Q$, rappresenta \textbf{la query del vettore, cioè quello che il vettore cerca, la colonna di $K^T$} rappresenta quello che il vettore vuole "dichiarare" o rappresenta.
+Il prodotto fra riga e colonna è come fare $x_n^T xn$ solo che in questo caso abbiamo matrici di peso apprendibili e quindi rappresentano precisamente quello che il vettore cerca e quello che vuole rappresentare, poi facendo la SOFTMAX (cioè esponenziale e calcolando per riga), dopo aver calcolato tutti gli elementi,
+si avrà una matrice quadrata $N x N$, di coefficienti $a_{i,j}$, quei coefficienti si moltiplicano, per la matrice $V$ (che alla fine per ogni riga avremo il vettore $y_n$ di \textbf{l'equazione 3.3}), che rappresenta i valori veri, dopo questa moltiplicazione si avrà $Y$, la matrice finale}
+
+\end{figure}
+
+
+\newpage
+
+
+
 
 \subsection{Confronto con le Reti Neurali Convenzionali}
 Nelle reti neurali tradizionali, i percorsi di segnale moltiplicano le attivazioni per pesi sinaptici $W_{ij}$ fissi ed indipendenti dai dati correnti. Nel Transformer, al contrario, le attivazioni vengono moltiplicate per coefficienti di attenzione $a_{nm}$ che sono \emph{funzioni dinamiche dipendenti dai dati di input specifici}. Se un coefficiente $a_{nm}$ si annulla per un dato input, il segnale proveniente dal token $m$ viene completamente ignorato nella costruzione dell'output $n$.
@@ -709,9 +734,7 @@ D_v = \frac{D}{H} \implies H D_v = D
 \end{equation}
 In questo modo, la dimensione complessiva del calcolo rimane comparabile a quella di un'attenzione singola a piena dimensione.
 
-\begin{observation}{Analogia con le CNN}
-L'uso di teste di attenzione multiple in parallelo è concettualmente analogo all'impiego di molteplici filtri convoluzionali in ciascun livello di una rete neurale convoluzionale (CNN), in cui ciascun filtro apprende a rilevare caratteristiche o \textit{feature} differenti.
-\end{observation}
+
 
 L'algoritmo complessivo per l'Attenzione Multi-Testa è formalizzato di seguito:
 
@@ -729,12 +752,13 @@ L'algoritmo complessivo per l'Attenzione Multi-Testa è formalizzato di seguito:
 \end{enumerate}
 \end{tcolorbox}
 
-\begin{observation}{Decomposizione dell'Attenzione Multi-Testa come Somma}
-Partizionando orizzontalmente la matrice di proiezione $W^{(o)}$ in sotto-matrici $W_h^{(o)} \in \mathbb{R}^{D_v \times D}$, l'equazione \eqref{eq:mha_concat} può essere riscritta in modo del tutto equivalente come somma sui contributi delle singole teste:
-\begin{equation}
-Y = \sum_{h=1}^{H} H_h W_h^{(o)}
-\end{equation}
-\end{observation}
+\textbf{In questo senso, la notazione $Y(X)$, vuol dire che $Y$ è prodotta in output, quando in input ha $X$.}.
+
+Nel nostro caso $Y(X) = Y$.
+\begin{center}
+    Y è il nome dell'output; \(Y(X)\) enfatizza che quell'output è una funzione dell'input X
+\end{center}
+
 
 \section{Livello Transformer (\textit{Transformer Layer})}
 L'attenzione multi-testa costituisce il nucleo centrale del Transformer. Tuttavia, per costruire reti profonde ed espressive, occorre impilare più livelli di attenzione uno sopra l'altro.
@@ -864,4 +888,777 @@ Un'alternativa ampiamente utilizzata consiste nell'impiegare \textbf{codifiche p
 
 Sebbene questo approccio eviti la progettazione euristica di funzioni trigonometriche, esso presenta un limite fondamentale: \emph{non è in grado di generalizzare a sequenze di lunghezza superiore a quelle osservate durante l'addestramento}, poiché i vettori corrispondenti a posizioni non viste non sono mai stati aggiornati dai gradienti. Pertanto, le codifiche apprese sono adatte principalmente quando la lunghezza delle sequenze rimane approssimativamente costante tra addestramento e inferenza.
 
+\subsubsection{Gerarchia dei Language Models}
+
+Nel contesto della \textit{Generative AI} si incontrano frequentemente i termini \textbf{Language Model (LM)}, \textbf{Generative Language Model} e \textbf{Large Language Model (LLM)}. Questi concetti sono collegati tra loro, ma descrivono aspetti differenti di un modello.
+
+Una rappresentazione intuitiva è:
+
+\begin{equation}
+\text{Language Model}
+\supseteq
+\text{Generative Language Model}
+\supseteq
+\text{Large Language Model (LLM)}
+\end{equation}
+
+Questa rappresentazione deve però essere interpretata con cautela: il termine \textit{LLM} non identifica semplicemente una particolare funzione del modello, ma indica principalmente un \textbf{Language Model di grande scala}. Il termine ``generative'', invece, descrive la capacità del modello di generare nuove sequenze linguistiche.
+
+\subsubsection{Language Model}
+
+Un \textbf{Language Model (LM)} è un modello che descrive la distribuzione di probabilità delle sequenze di token appartenenti a un linguaggio.
+
+Consideriamo una sequenza di token:
+
+\begin{equation}
+x_1,x_2,\ldots,x_n.
+\end{equation}
+
+Il Language Model cerca di modellare la probabilità congiunta:
+
+\begin{equation}
+P(x_1,x_2,\ldots,x_n).
+\end{equation}
+
+Grazie alla \textbf{chain rule della probabilità}, questa probabilità può essere scomposta nel prodotto:
+
+\begin{equation}
+P(x_1,\ldots,x_n)
+\prod_{i=1}^{n}
+P(x_i\mid x_1,\ldots,x_{i-1}).
+\end{equation}
+
+Quindi, in particolare, il modello può stimare la probabilità del prossimo token conoscendo quelli precedenti:
+
+\begin{equation}
+P(x_i\mid x_1,\ldots,x_{i-1}).
+\end{equation}
+
+\paragraph{Esempio.}
+
+Supponiamo di avere la sequenza:
+
+\begin{center}
+\texttt{Il gatto è}
+\end{center}
+
+Il Language Model può stimare probabilità come:
+
+\begin{align}
+P(\texttt{seduto}\mid \texttt{Il gatto è}) &= 0.35,\
+P(\texttt{rosso}\mid \texttt{Il gatto è}) &= 0.10,\
+P(\texttt{grande}\mid \texttt{Il gatto è}) &= 0.08.
+\end{align}
+
+In questo modo il modello rappresenta le regolarità statistiche presenti nel linguaggio.
+
+\begin{warning}
+Un Language Model non deve necessariamente essere interpretato come un modello che ``scrive testo''. Il concetto fondamentale è che \textbf{modella probabilisticamente il linguaggio}, cioè assegna probabilità alle sequenze o ai token condizionati al contesto.
+\end{warning}
+
+\subsubsection{Generative Language Model}
+
+Un \textbf{Generative Language Model} è un Language Model che viene utilizzato per \textbf{generare nuove sequenze di testo}.
+
+Nel caso di un modello autoregressivo, la generazione avviene tipicamente un token alla volta.
+
+Supponiamo di avere:
+
+\begin{center}
+\texttt{Il gatto è}
+\end{center}
+
+Il modello calcola una distribuzione di probabilità sul prossimo token:
+
+\begin{equation}
+P(x_{t+1}\mid x_1,\ldots,x_t).
+\end{equation}
+
+Supponiamo che venga scelto il token:
+
+\begin{center}
+\texttt{seduto}.
+\end{center}
+
+La sequenza diventa:
+
+\begin{center}
+\texttt{Il gatto è seduto}
+\end{center}
+
+A questo punto il modello calcola nuovamente la distribuzione del prossimo token:
+
+\begin{equation}
+P(x_{t+2}\mid x_1,\ldots,x_t,\texttt{seduto}).
+\end{equation}
+
+Potrebbe quindi generare:
+
+\begin{center}
+\texttt{Il gatto è seduto sul}
+\end{center}
+
+e continuare nello stesso modo.
+
+Possiamo quindi schematizzare il processo come:
+
+\begin{equation}
+\text{contesto}
+\longrightarrow
+\text{distribuzione sul prossimo token}
+\longrightarrow
+\text{scelta del token}
+\longrightarrow
+\text{nuovo contesto}.
+\end{equation}
+
+Ad esempio:
+
+\begin{center}
+\begin{tikzpicture}[node distance=1.5cm]
+\node (a) {\texttt{Il gatto è}};
+\node (b) [right of=a, xshift=2cm] {\texttt{seduto}};
+\node (c) [right of=b, xshift=2cm] {\texttt{sul}};
+\node (d) [right of=c, xshift=2cm] {\texttt{divano}};
+
+\draw[->] (a) -- (b);
+\draw[->] (b) -- (c);
+\draw[->] (c) -- (d);
+\end{tikzpicture}
+\end{center}
+
+Il modello costruisce quindi progressivamente una nuova sequenza linguistica.
+
+\subsubsection{Large Language Model (LLM)}
+
+Un \textbf{Large Language Model (LLM)} è un Language Model caratterizzato da una \textbf{grande scala}.
+
+Il termine ``Large'' si riferisce principalmente alla dimensione e alla complessità del modello. In particolare, gli LLM moderni possono avere:
+
+\begin{itemize}
+\item un numero molto elevato di parametri;
+\item enormi quantità di dati utilizzati durante il training;
+\item elevati costi computazionali per l'addestramento;
+\item una notevole capacità di rappresentare strutture e regolarità del linguaggio.
+\end{itemize}
+
+Il termine LLM, quindi, non descrive direttamente il meccanismo con cui il modello genera il testo. Descrive principalmente la \textbf{scala} del Language Model.
+
+Per esempio, GPT, Llama e altri modelli linguistici moderni appartengono alla categoria degli LLM.
+
+\subsubsection{Come sono collegati i tre concetti?}
+
+Possiamo ora riassumere il rapporto tra i termini:
+
+\begin{center}
+\begin{tikzpicture}[node distance=1.5cm]
+\node (lm) [draw, rounded corners] {\textbf{Language Model}};
+\node (glm) [draw, rounded corners, below of=lm] {\textbf{Generative Language Model}};
+\node (llm) [draw, rounded corners, below of=glm] {\textbf{Large Language Model (LLM)}};
+
+\draw[->] (lm) -- (glm);
+\draw[->] (glm) -- (llm);
+\end{tikzpicture}
+\end{center}
+
+Tuttavia, è più preciso pensare a queste caratteristiche come a \textbf{dimensioni differenti}:
+
+\begin{itemize}
+\item \textbf{Language Model}: indica che il modello è progettato per modellare il linguaggio;
+\item \textbf{Generative}: indica che il modello viene utilizzato per generare nuove sequenze linguistiche;
+\item \textbf{Large}: indica che il modello ha una grande scala in termini di parametri, dati e capacità computazionale.
+\end{itemize}
+
+Pertanto, un modello può essere contemporaneamente:
+
+\begin{equation}
+\boxed{
+\text{Language Model}
++
+\text{Generative}
++
+\text{Large}
+}
+\end{equation}
+
+e in questo caso parliamo tipicamente di un \textbf{Generative LLM}.
+
+\subsubsection{Dove si colloca il Transformer?}
+
+Un'ulteriore fonte di confusione è il termine \textbf{Transformer}.
+
+Il Transformer \textbf{non è una categoria di Language Model}. È invece un'\textbf{architettura di rete neurale} che può essere utilizzata per costruire Language Models.
+
+Possiamo quindi distinguere i diversi livelli:
+
+\begin{center}
+\begin{tikzpicture}[node distance=1.4cm]
+\node (t) [draw, rounded corners] {\textbf{Architettura: Transformer}};
+\node (lm) [draw, rounded corners, below of=t] {\textbf{Language Model}};
+\node (gen) [draw, rounded corners, below of=lm] {\textbf{Generative Language Model}};
+\node (llm) [draw, rounded corners, below of=gen] {\textbf{LLM}};
+
+\draw[->] (t) -- (lm);
+\draw[->] (lm) -- (gen);
+\draw[->] (gen) -- (llm);
+\end{tikzpicture}
+\end{center}
+
+Questa rappresentazione è utile per capire che stiamo parlando di concetti diversi.
+
+Il \textbf{Transformer} risponde alla domanda:
+
+\begin{center}
+\textit{``Come è costruita l'architettura del modello?''}
+\end{center}
+
+Il \textbf{Language Model} risponde invece alla domanda:
+
+\begin{center}
+\textit{``Che tipo di problema linguistico stiamo modellando?''}
+\end{center}
+
+Il termine \textbf{Generative} indica:
+
+\begin{center}
+\textit{``Il modello viene utilizzato per generare nuove sequenze?''}
+\end{center}
+
+Infine, il termine \textbf{Large} indica:
+
+\begin{center}
+\textit{``Quanto è grande il modello?''}
+\end{center}
+
+\subsubsection{Schema riassuntivo}
+
+La distinzione può essere riassunta nella seguente tabella:
+
+\begin{center}
+\begin{tabular}{|c|c|}
+\hline
+\textbf{Termine} & \textbf{Cosa descrive?} \\
+\hline
+Language Model & Modella il linguaggio \\
+\hline
+Generative Language Model & Genera nuove sequenze linguistiche \\
+\hline
+LLM & Language Model di grande scala \\
+\hline
+Transformer & Architettura neurale utilizzabile per costruire il modello \\
+\hline
+\end{tabular}
+\end{center}
+
+Per esempio, possiamo descrivere un modello come GPT, in maniera semplificata, dicendo che è un:
+
+\begin{equation}
+\boxed{
+\text{LLM generativo basato sull'architettura Transformer}
+}
+\end{equation}
+
+Quindi è importante non confondere i livelli:
+
+\begin{center}
+\textbf{Transformer}
+\(\quad\rightarrow\quad\)
+\text{architettura}
+\end{center}
+
+\begin{center}
+\textbf{Language Model}
+\(\quad\rightarrow\quad\)
+\text{modello del linguaggio}
+\end{center}
+
+\begin{center}
+\textbf{Generative}
+\(\quad\rightarrow\quad\)
+\text{capacità/modalità di generazione}
+\end{center}
+
+\begin{center}
+\textbf{Large}
+\(\quad\rightarrow\quad\)
+\text{scala del modello}
+\end{center}
+
+
+
+
+\chapter{Generative LLMs}
+
+In questo capitolo vengono introdotti i concetti fondamentali dei modelli linguistici di grandi dimensioni (Large Language Models, LLM) generativi. È fondamentale chiarire fin dall'inizio un'importante distinzione terminologica: in senso lato, il termine LLM può includere una vasta gamma di architetture, inclusi modelli non generativi o basati puramente su encoder (come ad esempio BERT). Tuttavia, per mantenere la trattazione semplice e in linea con l'uso predominante nel panorama attuale, in questi appunti utilizzeremo l'acronimo LLM per riferirci specificamente ai modelli di natura generativa, di cui la famiglia GPT rappresenta l'esempio più celebre.
+
+Il percorso di studio inizierà con un'introduzione generale al funzionamento degli LLM, esaminando da vicino i passaggi chiave e i mattoni architetturali necessari per la costruzione di tali modelli. In seguito, l'attenzione si sposterà su due delle sfide più complesse e attuali legate all'aumento di scala (scaling) di queste reti: in primo luogo, le metodologie per addestrare modelli di queste dimensioni su moli di dati immense; in secondo luogo, le tecniche per potenziarli affinché riescano a gestire input con contesti estremamente lunghi (long-context inputs). Infine, il capitolo si chiuderà con un breve riepilogo per consolidare i concetti appresi.
+
+\section{Breve introduzione agli LLM (A Brief Introduction to LLMs)}
+
+In questa sezione, noi introduciamo i concetti basici degli LLMs, richiesti per questo capitolo e i successivi sottocapitoli,
+In ambito accademico e industriale, i termini "word" (parola) e "token" (unità di base prodotta dalla tokenizzazione) sono spesso usati come sinonimi, sebbene in elaborazione del linguaggio naturale (NLP) possiedano sfumature tecniche leggermente differenti.
+
+Prima di presentare i dettagli tecnici, vediamo prima come un \textbf{language models} lavora. La funzionalità core, del language modeling, è di \textbf{stimare la probabilità di una sequenza di token}.
+
+Sia data una sequenza di token $x = \{x_0, x_1, \dots, x_m\}$, dove $x_0$ rappresenta un simbolo speciale di inizio sequenza (spesso indicato con il simbolo \texttt{⟨s⟩} o \texttt{⟨SOS⟩}). Applicando la regola della catena della probabilità, la probabilità congiunta dell'intera sequenza può essere fattorizzata nel seguente modo:
+\begin{equation}
+Pr(x_0, \dots, x_m)
+=
+\prod_{i=0}^{m} Pr(x_i \mid x_0, \dots, x_{i-1})
+\end{equation}
+
+La notazione utilizzata nella formula precedente è una \textbf{abbreviazione}. Più rigorosamente, le variabili aleatorie sono indicate con lettere maiuscole
+$X_0, \dots, X_m$, mentre $x_0, \dots, x_m$ rappresentano i rispettivi valori (o realizzazioni).
+
+Pertanto, la notazione
+
+\begin{equation}
+Pr(x_0, \dots, x_m)
+\end{equation}
+
+è un'abbreviazione di
+
+\begin{equation}
+Pr(X_0=x_0, \dots, X_m=x_m).
+\end{equation}
+
+Analogamente, il termine
+
+\begin{equation}
+Pr(x_i \mid x_0, \dots, x_{i-1})
+\end{equation}
+
+è un'abbreviazione di
+
+\begin{equation}
+Pr(X_i=x_i \mid X_0=x_0, \dots, X_{i-1}=x_{i-1}).
+\end{equation}
+
+Quindi, la formula può essere scritta in forma completamente esplicita come
+
+\begin{equation}
+Pr(X_0=x_0, \dots, X_m=x_m)
+=
+\prod_{i=0}^{m}
+Pr(X_i=x_i \mid X_0=x_0, \dots, X_{i-1}=x_{i-1}).
+\end{equation}
+
+Per semplicità, nei testi si utilizza spesso la prima notazione, omettendo le variabili aleatorie $X_i$ e scrivendo direttamente i loro valori $x_i$.
+
+dove $Pr(x_i \vert{} x_0, \dots, x_{i-1})$ rappresenta la probabilità condizionata del token $x_i$ dato tutto il suo contesto precedente $\{x_0, \dots, x_{i-1}\}$.
+
+
+Dove assumiamo che quando $i$ = 0:
+$$
+Pr(X_0 = ⟨s⟩) = 1
+$$
+questo perchè il token di input è predefinito, \textbf{ed è sempre pari a 1}
+
+
+Per ragioni di stabilità numerica (per evitare problemi di underflow quando si moltiplicano molte probabilità piccole), nell'addestramento delle reti neurali si preferisce operare nel dominio logaritmico:
+\begin{equation}
+\log Pr(x_0, \dots, x_m) = \sum_{i=1}^m \log Pr(x_i | x_0, \dots, x_{i-1})
+\end{equation}
+\begin{observation}{Osservazione sul primo termine della sommatoria}
+La sommatoria in questa formula parte da $i=1$ anziché da $0$. Un passaggio logico implicito in questa equazione è l'assunzione che $\log Pr(x_0) = 0$, poiché la probabilità del token iniziale predefinito $x_0$ è pari a $1$ (essendo deterministicamente fornito al modello).
+\end{observation}
+
+Quando applichiamo un LLM addestrato (fase di inferenza), l'operazione fondamentale è trovare il token successivo più probabile dato il contesto. Dal punto di vista matematico, ciò si traduce in:
+\begin{equation}
+\arg\max_{x_i \in V} Pr(x_i | x_0, \dots, x_{i-1})
+\end{equation}
+dove $V$ rappresenta il vocabolario del modello, ovvero l'insieme di tutti i possibili token validi.
+Questo processo avviene in modo \textbf{autoregressivo} da sinistra verso destra: ad ogni passo il modello predice il token più probabile, lo appende al contesto esistente e ripete l'operazione per predire il token successivo.
+
+\begin{example}{Esempio di Generative Language Models (Non large)}
+Immaginiamo di voler completare la sequenza a partire dal prefisso \texttt{ a}:
+\begin{enumerate}
+\item \textbf{Contesto:} \texttt{ a} $\rightarrow$ Il modello ricerca $\arg\max_{x_2 \in V} Pr(x_2 \vert{} \texttt{<s> a})$. Il token vincente è \texttt{b}.
+\item \textbf{Contesto:} \texttt{ a b} $\rightarrow$ Il modello ricerca $\arg\max_{x_3 \in V} Pr(x_3 \vert{} \texttt{<s> a b})$. Il token vincente è \texttt{c}.
+\item \textbf{Contesto:} \texttt{ a b c} $\rightarrow$ Il modello ricerca $\arg\max_{x_4 \in V} Pr(x_4 \vert{} \texttt{<s> a b c})$. Il token vincente è \texttt{d}.
+\end{enumerate}
+In questo modo il modello ha generato progressivamente la sequenza \texttt{b c d} aggiungendo sempre le proprie predizioni al nuovo contesto.
+
+Nota che questo processo può essere implementato tramite una rete neurale o tramite un \textbf{Decoder-only Transformers}
+\end{example}
+
+\subsection{Architettura Transformer basata solo su Decoder (Decoder-only Transformers)}
+
+L'architettura Transformer di tipo "decoder-only" è ad oggi il paradigma dominante per la costruzione degli LLM generativi.
+In questo schema, l'input è una sequenza di token $\{x_0, \dots, x_{m-1}\}$ che viene convertita in una sequenza di vettori di embedding (rappresentazioni vettoriali continue) $\{e_0, \dots, e_{m-1}\}$.
+Ogni vettore $e_i \in \mathbb{R}^{d_e}$ è ottenuto dalla \textbf{somma} dell'embedding semantico (token embedding) relativo a $x_i$ e dell'embedding posizionale per la posizione $i$.
+
+Il nucleo del modello è costituito da una pila (stack) di blocchi Transformer. Ciascun blocco è proprio come quello di un Transformer normale:
+\begin{enumerate}
+\item Un meccanismo di self-attention (auto-attenzione).
+\item Una rete neurale feed-forward (FFN).
+\end{enumerate}
+
+Questi sotto-livelli possono essere configurati secondo due architetture principali che determinano dove avviene la normalizzazione (Layer Normalization, o LNorm):
+\begin{align}
+\text{Post-norm:} \quad & output = LNorm(F(input) + input) \\
+\text{Pre-norm:} \quad & output = F(LNorm(input)) + input
+\end{align}
+dove $F(\cdot)$ indica la funzione centrale del sotto-livello (la self-attention o l'FFN), mentre la somma garantisce la presenza di connessioni residue (residual connections), fondamentali per consentire al gradiente di fluire in reti molto profonde.
+Questo è esattamente quello che abbiamo visto nei Transformer, dove vi è il layer di normalizzazione, nella fase di Multi-Head, cioè quando faccio $Y(X)$, e poi nella fase quando applico la MLP.
+
+
+\subsubsection{Meccanismo di Attention QKV}
+
+$F(\cdot)$ può rappresentare l'algoritmo di \textit{Multi-Head Self-Attention}, che abbiamo visto nella sezione dedicata ai Transformer, oppure una rete \textit{Multi-Layer Perceptron} (MLP). In questo paragrafo consideriamo il meccanismo di \textit{Self-Attention} basato su Query, Key e Value (QKV).
+
+L'espressione generale della QKV attention è:
+
+\begin{equation}
+\operatorname{Att}_{qkv}(Q,K,V)
+=
+\operatorname{Softmax}
+\left(
+\frac{QK^\top}{\sqrt{D_k}} + \operatorname{Mask}
+\right)V
+\end{equation}
+
+dove:
+
+\begin{itemize}
+
+\item $Q,K,V \in \mathbb{R}^{N \times D}$ sono rispettivamente le matrici delle \textit{Query}, delle \textit{Key} e dei \textit{Value}, dove $N$ è il numero di token della sequenza e $D$ è la dimensione delle rappresentazioni vettoriali.
+
+\item $D_k$ è la dimensione delle rappresentazioni utilizzate per le Query e le Key. Nel nostro caso assumiamo:
+
+\begin{equation}
+D_k = D
+\end{equation}
+
+Pertanto, nel nostro caso particolare, $Q,K,V\in\mathbb{R}^{N\times D}$.
+
+La divisione per $\sqrt{D_k}$ è un fattore di \textit{scaling} che evita che i prodotti scalari tra Query e Key assumano valori troppo grandi, i quali potrebbero portare il Softmax in regioni caratterizzate da gradienti molto piccoli.
+
+\item $\operatorname{Mask}\in\mathbb{R}^{N\times N}$ è la matrice di mascheramento utilizzata per impedire al modello di utilizzare informazioni relative ai token futuri.
+
+\end{itemize}
+
+\paragraph{Maschera causale}
+
+Nel caso di un Transformer \textit{decoder-only}, il modello è autoregressivo: quando deve elaborare la posizione $i$, può utilizzare solamente le informazioni relative ai token presenti nelle posizioni precedenti o nella posizione corrente, ma non quelle relative alle posizioni successive.
+
+La matrice \textit{Mask} ha quindi l'elemento $(i,j)$ a \textbf{-$\infty$} se $j > i$, altrimenti 0, cosi gli altri elementi non vengono cambiati, questo perchè poi applicando la softmax, diventa 0.
+
+\begin{equation*}
+\text{Mask} = 
+\begin{bmatrix}
+0 & -\infty & -\infty & \dots & -\infty \\
+0 & 0 & -\infty & \dots & -\infty \\
+\vdots & \vdots & \vdots & \ddots & \vdots \\
+0 & 0 & 0 & \dots & 0
+\end{bmatrix}
+\end{equation*}
+
+Consideriamo la matrice $A$ dopo la Softmax:
+
+\begin{equation}
+\begin{bmatrix}
+a_{1,1} & 0 & \dots & 0  \\
+a_{2,1} & a_{2,2} & 0 & \dots & 0 \\
+\dots \\
+a_{N,1} & a_{N,2} & \dots & a_{N,N} \\
+\end{bmatrix}
+\end{equation}
+che contiene i pesi di attenzione. Il prodotto finale è:
+
+\begin{equation}
+Y=AV
+\end{equation}
+
+dove $Y\in\mathbb{R}^{N\times D}$ è la matrice delle nuove rappresentazioni vettoriali.
+
+La maschera fa si che $y_n^t$ della matrice $Y$, non dipenda dai token futuri, ma solo da token che vengono prima di lui, questo perchè:
+\begin{equation}
+    y_1 = a_{1,1} x_1 + a_{1,2} x_2 + \dots + a_{1,N} x_N
+\end{equation}
+Ma dato che
+\[
+a_{i,j} = 0 \text{ per j > i }
+\]
+Allora si ha che:
+\begin{equation}
+    y_1 = a_{1,1} x_1
+\end{equation}
+e quindi $y_1$, dipende solo dal token $x_1$.
+
+Anche 
+\begin{equation}
+    y_2 = a_{2,1} x_1 + a_{2,2} x_2
+\end{equation}
+e quindi $y_2$, dipende solo dai token precedenti.
+
+Questo è il meccanismo che permette di mantenere la natura autoregressiva del Transformer decoder-only: la rappresentazione associata a ciascuna posizione contiene solamente informazioni provenienti dal token corrente e dai token precedenti, e non dai token futuri.
+
+\paragraph{Multi-Head Self-Attention}
+
+La \textit{Multi-Head Self-Attention} esegue il meccanismo di QKV attention in $H$ teste (\textit{heads}) differenti, in parallelo. Ogni testa utilizza proprie matrici di proiezione e può quindi apprendere differenti modalità di relazione tra i token.
+
+La rappresentazione prodotta dalla \textit{Multi-Head Self-Attention} è:
+
+\begin{equation}
+F(H)
+=
+\operatorname{Concat}
+\left(
+\operatorname{H}_1,
+\ldots,
+\operatorname{H}_H
+\right)W^O
+\end{equation}
+
+dove $\operatorname{Concat}$ concatena lungo la dimensione delle caratteristiche le rappresentazioni prodotte dalle diverse teste e $W^O$ è una matrice di proiezione utilizzata per combinare le informazioni provenienti dalle diverse teste.
+
+Per la $h$-esima testa, con $h=1,\ldots,H$, si calcolano:
+
+\begin{equation}
+Q_h = HW_h^Q,
+\qquad
+K_h = HW_h^K,
+\qquad
+V_h = HW_h^V
+\end{equation}
+
+dove le matrici $W_h^Q$, $W_h^K$ e $W_h^V$ sono parametri addestrabili.
+
+Nel caso considerato in questo paragrafo assumiamo che ogni testa produca rappresentazioni di dimensione $D$. Pertanto:
+
+\begin{equation}
+Q_h,K_h,V_h\in\mathbb{R}^{N\times D}
+\end{equation}
+
+e:
+
+\begin{equation}
+W_h^Q,W_h^K,W_h^V\in\mathbb{R}^{D\times D}
+\end{equation}
+
+La QKV attention della $h$-esima testa è quindi:
+
+\begin{equation}
+\operatorname{H}_h
+=
+\operatorname{Att}_{qkv}
+(Q_h,K_h,V_h)
+\end{equation}
+
+ossia:
+
+\begin{equation}
+\operatorname{H}_h
+=
+\operatorname{Softmax}
+\left(
+\frac{Q_hK_h^\top}{\sqrt{D_k}}
++
+\operatorname{Mask}
+\right)V_h
+\end{equation}
+
+con:
+
+\begin{equation}
+D_k=D
+\end{equation}
+
+Poiché ciascuna delle $H$ teste produce una matrice di dimensione $N\times D$, dopo la concatenazione si ottiene:
+
+\begin{equation}
+\operatorname{Concat}
+\left(
+\operatorname{H}_1,\ldots,\operatorname{H}_H
+\right)
+\in\mathbb{R}^{N\times HD}
+\end{equation}
+
+Di conseguenza, per riportare la rappresentazione alla dimensione originale $D$, la matrice di proiezione finale deve avere dimensione:
+
+\begin{equation}
+W^O\in\mathbb{R}^{HD\times D}
+\end{equation}
+
+e quindi:
+
+\begin{equation}
+F(H)\in\mathbb{R}^{N\times D}
+\end{equation}
+
+La Multi-Head Self-Attention permette quindi di ottenere, a partire dalle rappresentazioni iniziali dei token, nuove rappresentazioni contestualizzate. La maschera causale garantisce che tali rappresentazioni rispettino il vincolo autoregressivo: la rappresentazione alla posizione $i$ può dipendere solamente dai token nelle posizioni $0,\ldots,i$.
+
+
+\subsubsection{Output del Transformer e predizione del token successivo}
+
+Al termine dello stack composto dai blocchi Transformer, otteniamo una matrice di rappresentazioni contestualizzate:
+
+\begin{equation}
+H^L \in \mathbb{R}^{N\times D}
+\end{equation}
+
+dove $N$ è il numero di token della sequenza e $D$ è la dimensione delle rappresentazioni vettoriali.
+
+La riga $i$-esima di $H^L$, indicata con $h_i^T$, contiene la rappresentazione contestualizzata del token nella posizione $i$. Grazie alla maschera causale utilizzata nei blocchi di Self-Attention, tale rappresentazione può dipendere solamente dai token presenti nelle posizioni precedenti e dalla posizione corrente.
+
+Per trasformare queste rappresentazioni in probabilità sui possibili token del vocabolario, viene applicata una proiezione lineare:
+
+\begin{equation}
+Z = H^L W^O
+\end{equation}
+
+dove:
+
+\begin{equation}
+W^O \in \mathbb{R}^{D\times |V|}
+\end{equation}
+
+è una matrice di pesi addestrabili e $|V|$ rappresenta la dimensione del vocabolario.
+
+Di conseguenza:
+
+\begin{equation}
+Z\in\mathbb{R}^{N\times |V|}
+\end{equation}
+
+La matrice $Z$ contiene i cosiddetti \textit{logits}: per ogni posizione della sequenza, contiene un valore associato a ciascun token del vocabolario.
+
+Successivamente, viene applicata la funzione Softmax lungo la dimensione del vocabolario:
+
+\begin{equation}
+P
+=
+\operatorname{Softmax}(H^L W^O)
+\end{equation}
+
+ottenendo:
+
+\begin{equation}
+P\in\mathbb{R}^{N\times |V|}
+\end{equation}
+
+In particolare, l'elemento $P_{i,j}$ rappresenta la probabilità assegnata al $j$-esimo token del vocabolario dati $i$ \textbf{token precedenti}.
+
+Pertanto, ogni riga della matrice $P$ rappresenta una distribuzione di probabilità sull'intero vocabolario:
+
+\begin{equation}
+\sum_{j=1}^{|V|}P_{i,j}=1
+\end{equation}
+
+
+La prima riga rappresenta quindi la distribuzione:
+
+\begin{equation}
+P(x_1\mid x_0)
+\end{equation}
+
+ossia le probabilità dei possibili token successivi dato il token ``Il''.
+
+La seconda riga rappresenta invece:
+
+\begin{equation}
+P(x_2\mid x_0,x_1)
+\end{equation}
+
+
+
+
+
+
+\subsection{Addestramento degli LLM (Training LLMs)}
+Sia dato un dataset di addestramento $\mathcal{D}$ composto da $K$ sequenze. La verosimiglianza logaritmica (log-likelihood) per una sequenza $x = x_0 \dots x_m$ in $\mathcal{D}$ è definita come:
+\begin{equation}
+\mathcal{J}*\theta(x) = \sum*{i=1}^m \log Pr_\theta(x_i | x_0, \dots, x_{i-1})
+\end{equation}
+dove il pedice $\theta$ indica i parametri ottimizzabili del modello linguistico.
+
+L'obiettivo dell'addestramento (Maximum Likelihood Training) è trovare i parametri $\hat{\theta}$ che massimizzano la log-likelihood totale su tutto il dataset:
+\begin{equation}
+\hat{\theta} = \arg\max_\theta \sum_{x \in \mathcal{D}} \mathcal{J}_\theta(x)
+\end{equation}
+
+\subsection{Fine-tuning e Applicazione degli LLM (Fine-tuning and Applying LLMs)}
+Una volta effettuato il pre-addestramento, l'LLM ha incamerato vaste conoscenze testuali, ma solitamente non è specializzato per eseguire task o seguire comandi dell'utente. Nell'era dell'AI generativa, gli LLM sono usati come sistemi completi: formuliamo un problema in linguaggio naturale (il \textit{prompt}) e lasciamo che il modello lo completi autoregressivamente.
+
+Formalmente, dato un prompt utente $x = x_0 \dots x_m$ (il contesto), la generazione della risposta $y = y_1 \dots y_n$ consiste nel trovare la sequenza ottimale $\hat{y}$:
+\begin{equation}
+\hat{y} = \arg\max_y \log Pr(y | x) = \arg\max_y \sum_{i=1}^n \log Pr(y_i | x_0, \dots, x_m, y_1, \dots, y_{i-1})
+\end{equation}
+Per semplificare l'interazione, si utilizzano frequentemente i \textbf{prompt template}, ovvero stringhe di testo fisse con delle variabili segnaposto.
+\begin{example}
+Se vogliamo valutare la grammatica di una frase, potremmo usare il template:\
+\texttt{{*sentence*}} \
+\texttt{Question: Is this sentence grammatically correct?} \
+\texttt{Answer: }
+\end{example}
+
+Sebbene l'approccio diretto mostri spiccate abilità di "zero-shot learning" (dove il modello risolve compiti per i quali non è stato esplicitamente addestrato), la vera efficacia si sprigiona con il \textbf{fine-tuning basato su istruzioni (Instruction Fine-tuning)}.
+
+Il fine-tuning prevede l'utilizzo di un dataset ridotto e curato, $\mathcal{D}_{tune}$, contenente tuple formate da un input (\textit{instruction + user info}) e da un output desiderato. Matematicamente, partendo dai pesi pre-addestrati $\hat{\theta}$, procediamo ad ottimizzare ulteriormente il modello (chiameremo lo stato di transizione $\hat{\theta}^+$):
+\begin{equation}
+\tilde{\theta} = \arg\max_{\hat{\theta}^+} \sum_{sample \in \mathcal{D}*{tune}} \mathcal{F}*{\hat{\theta}^+}(sample)
+\end{equation}
+Per un singolo campione composto da prompt e risposta, $sample = [x_{sample}, y_{sample}]$, la funzione obiettivo valuta la probabilità condizionata della \textit{sola porzione di output}:
+\begin{equation}
+\mathcal{F}*{\hat{\theta}^+}(sample) = \log Pr*{\hat{\theta}^+}(y_{sample} | x_{sample})
+\end{equation}
+\begin{observation}
+\textbf{Passaggio logico esplicitato:} Durante il passo di backpropagation per il fine-tuning, calcoliamo l'errore ed i relativi gradienti esclusivamente sulle predizioni riguardanti la sequenza di output $y_{sample}$. I token relativi all'input $x_{sample}$ (il prompt stesso) sono processati in modalità "forward" per costruire il contesto utile all'attenzione, ma il modello non è penalizzato se non predice esattamente i token dell'istruzione, concentrando così lo sforzo di aggiornamento dei pesi unicamente su come la risposta aderisce alla richiesta.
+\end{observation}
+
+\subsection{Allineamento degli LLM con il mondo reale (Aligning LLMs with the World)}
+Riuscire a far seguire le istruzioni ad un LLM tramite fine-tuning (Supervised Fine-Tuning, SFT) è utile, ma non sufficiente a garantire la sua sicurezza in produzione. Il modello potrebbe ancora generare testi contenenti informazioni non fattuali, di parte o pericolose (e.g., indicazioni per creare armi).
+
+\begin{definition}{Allineamento (Alignment)}
+Il processo volto a guidare e vincolare il comportamento degli LLM affinché le loro risposte siano in sintonia con i valori etici, la verità e le aspettative degli esseri umani (sicurezza e innocuità).
+\end{definition}
+
+L'approccio più comune per raggiungere questo scopo è l'apprendimento per rinforzo basato sui feedback umani, noto come \textbf{RLHF (Reinforcement Learning from Human Feedback)}. Questo paradigma modella l'interazione in termini di Reinforcement Learning:
+\begin{itemize}
+\item \textbf{Agente (Policy):} L'LLM stesso, che agisce nell'ambiente generando testi condizionati al prompt utente con probabilità $Pr(y\vert{}x)$.
+\item \textbf{Modello di Ricompensa (Reward Model):} Una rete addestrata a imitare il giudizio umano. Valuta l'output generato dall'agente assegnandogli un punteggio scalare continuo, che funge da segnale (reward) sulla qualità e la sicurezza del testo.
+\end{itemize}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{_files/_images/Figure_2.2.png}
+\caption{Panoramica del ciclo di RLHF. A) Si apprende un LLM iniziale (policy) tramite pre-training e SFT; B) Si raccolgono dati annotando gli output generati dall'LLM con preferenze umane; C) Si addestra un Reward Model con tali classifiche; D) Si esegue l'RL fine-tuning della policy guidata dal Reward Model.}
+\end{figure}
+
+Il flusso di lavoro dell'RLHF è composto da quattro passaggi chiave:
+\begin{enumerate}
+\item Costruzione di una policy iniziale (tramite pre-training e SFT).
+\item Il modello genera diverse risposte alternative allo stesso prompt. Esperti umani vengono incaricati di valutare gli output stilando un ordinamento basato sulle preferenze e la sicurezza (ad esempio $y_1 \succ y_4 \succ y_2 \succ y_3$). Si preferisce l'ordinamento (ranking) all'assegnazione di un punteggio arbitrario perché è cognitivamente meno ambiguo e non richiede standard numerici complessi.
+\item Addestramento del Modello di Ricompensa $R_\omega(x, y)$ con parametri $\omega$, il quale riceve in ingresso il contesto concatenato all'output prodotto dall'agente. Il modello viene addestrato tramite una \textbf{loss di ranking a coppie} su un dataset di ordinamenti $\mathcal{D}_r$:
+\begin{equation}
+Loss_\omega(\mathcal{D}*r) = -\mathbb{E}*{(x, y_{k_1}, y_{k_2}) \sim \mathcal{D}*r} \log(Sigmoid(R*\omega(x, y_{k_1}) - R_\omega(x, y_{k_2})))
+\end{equation}
+Questa loss penalizza il modello se predice un divario di ricompensa negativo tra l'output preferito ($y_{k_1}$) e quello scartato ($y_{k_2}$), guidando la rete ad assegnare sempre score più alti ai testi che l'uomo ritiene migliori.
+\item Si esegue un fine-tuning mediante Reinforcement Learning (RL) basandosi sulle ricompense calcolate dal reward model appena addestrato. L'obiettivo per l'LLM iniziale pre-addestrato $\hat{\theta}^+$ diventa massimizzare il valore atteso della ricompensa su un dataset di input $\mathcal{D}_{rlft}$:
+\begin{equation}
+\tilde{\theta} = \arg\max_{\hat{\theta}^+} \mathbb{E}*{(x, y*{\hat{\theta}^+}) \sim \mathcal{D}*{rlft}} R*{\hat{\omega}}(x, y_{\hat{\theta}^+})
+\end{equation}
+(Per stabilizzare tale processo, in pratica vengono usati algoritmi matematici avanzati come la Proximal Policy Optimization, o PPO).
+\end{enumerate}
+
+\subsection{Ingegnerizzazione dei Prompt (Prompting LLMs)}
+Senza necessità di modificare i pesi del modello, l'interazione intelligente con un LLM passa attraverso l'ingegnerizzazione del testo di input.
+
+Una tecnica cruciale è l'\textbf{Apprendimento in-context (In-context Learning, ICL)}, un'abilità emergente degli LLM che permette loro di estrarre e imparare schemi logici direttamente dai dati in ingresso, nel momento dell'inferenza.
+L'ICL si sviluppa lungo tre approcci principali:
+\begin{itemize}
+\item \textbf{Zero-shot learning}: il modello deve risolvere un nuovo compito semplicemente seguendo un'istruzione descrittiva, senza avere alcun esempio nel prompt.
+\item \textbf{One-shot learning}: nel prompt viene fornito un singolo esempio dimostrativo (DEMO) con una correlazione corretta tra input e output, affinché il modello ne colga lo stile e la logica.
+\item \textbf{Few-shot learning}: il prompt è arricchito con vari esempi dimostrativi che chiariscono, ad esempio, strutture ricorrenti prima di richiedere l'elaborazione dell'input effettivo dell'utente (USER).
+\end{itemize}
+
+Quando il modello fallisce in compiti logico/matematici affrontandoli con ICL classico, entra in gioco la tecnica detta \textbf{Chain of Thought (CoT, Catena di Pensieri)}.
+\begin{definition}{Chain of Thought Prompting}
+Un metodo in cui si scompone un problema complesso (come calcoli matematici, ragionamento logico o commonsense) in una serie di passaggi logici intermedi che simulano l'approccio umano. Gli LLM vengono indotti ad emulare questa sequenza per arrivare con molta più affidabilità alla risposta corretta.
+\end{definition}
+
+Nella modalità \textbf{Few-shot CoT}, invece di fornire solo la coppia problema-soluzione, i DEMO conterranno il problema unito all'esatta procedura razionale step-by-step risolutiva. L'LLM, conformandosi al pattern espositivo, produrrà deduzioni intermedie e ridurrà drasticamente gli errori finali di inferenza.
+
+Nella modalità \textbf{Zero-shot CoT}, sfruttando una scoperta empirica ormai radicata nella comunità scientifica, si accoda dinamicamente un innesco linguistico fisso al prompt (una frase "trigger" del tipo: \textit{"Let's think step by step."}). Questa singola aggiunta altera la probabilità della distribuzione autoregressiva del modello a tal punto da obbligarlo a spacchettare il problema in ragionamenti indipendenti, permettendogli di giungere ad esiti logicamente corretti senza aver ricevuto nessun esempio formale precedente.
 \end{document}
