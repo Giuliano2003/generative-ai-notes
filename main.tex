@@ -1285,8 +1285,9 @@ Nota che questo processo può essere implementato tramite una rete neurale o tra
 \subsection{Architettura Transformer basata solo su Decoder (Decoder-only Transformers)}
 
 L'architettura Transformer di tipo "decoder-only" è ad oggi il paradigma dominante per la costruzione degli LLM generativi.
-In questo schema, l'input è una sequenza di token $\{x_0, \dots, x_{m-1}\}$ che viene convertita in una sequenza di vettori di embedding (rappresentazioni vettoriali continue) $\{e_0, \dots, e_{m-1}\}$.
+In questo schema, l'input è una sequenza di token $\{x_0, \dots, x_{N-1}\}$ che viene convertita in una sequenza di vettori di embedding (rappresentazioni vettoriali continue) $\{e_0, \dots, e_{m-1}\}$.
 Ogni vettore $e_i \in \mathbb{R}^{d_e}$ è ottenuto dalla \textbf{somma} dell'embedding semantico (token embedding) relativo a $x_i$ e dell'embedding posizionale per la posizione $i$.
+Poi successivamente viene messa in una matrice $X \in N \times D$, dove ogni riga $n-esima$, avrà $x_n^T$, proprio come i transformer. \textbf{Dove $x_0$} è proprio il token di inizio
 
 Il nucleo del modello è costituito da una pila (stack) di blocchi Transformer. Ciascun blocco è proprio come quello di un Transformer normale:
 \begin{enumerate}
@@ -1562,85 +1563,1106 @@ P(x_2\mid x_0,x_1)
 \end{equation}
 
 
+\textbf{Nota: Il token $x_0$ non viene prodotto perchè come abbiamo visto nella sezione precedente, da tutta la sua probabilità a quello di inizio, quindi supponiamo sia sempre il token iniziale $x_0$}
 
+
+Quindi questa archittetura, è quella tipicamente usata per costruire Generative Language Model, se sono sufficientemente grandi allora vengono chiamati LLMs generativi.
 
 
 
 \subsection{Addestramento degli LLM (Training LLMs)}
-Sia dato un dataset di addestramento $\mathcal{D}$ composto da $K$ sequenze. La verosimiglianza logaritmica (log-likelihood) per una sequenza $x = x_0 \dots x_m$ in $\mathcal{D}$ è definita come:
-\begin{equation}
-\mathcal{J}*\theta(x) = \sum*{i=1}^m \log Pr_\theta(x_i | x_0, \dots, x_{i-1})
-\end{equation}
-dove il pedice $\theta$ indica i parametri ottimizzabili del modello linguistico.
 
-L'obiettivo dell'addestramento (Maximum Likelihood Training) è trovare i parametri $\hat{\theta}$ che massimizzano la log-likelihood totale su tutto il dataset:
+In input riceve quindi un set di token
+$\{x_0,x_1,\dots,x_N\}$, questi vengono rappresentati in una matrice
+$X$, dove sulla riga $n$-esima vi è $x_n^T$.
+
+Nel caso del \textbf{Decoder Only Transformer}, che abbiamo visto prima,
+ogni riga della matrice di output produce una distribuzione di probabilità
+sul vocabolario, che rappresenta la probabilità del token successivo
+dato il contesto precedente, grazie alla \textbf{causal mask}.
+
+Ad esempio, considerando la sequenza:
+
 \begin{equation}
-\hat{\theta} = \arg\max_\theta \sum_{x \in \mathcal{D}} \mathcal{J}_\theta(x)
+x_0 = \langle BOS \rangle,\quad
+x_1 = \text{Il},\quad
+x_2 = \text{gatto},\quad
+x_3 = \text{corre}
 \end{equation}
+
+il modello produce contemporaneamente le seguenti predizioni:
+
+\begin{center}
+\begin{tabular}{c|c|c}
+\textbf{Contesto disponibile} & \textbf{Token da predire} & \textbf{Distribuzione prodotta} \\
+\hline
+$x_0$ & $x_1$ & $Pr(\cdot \mid x_0)$ \\
+$x_0,x_1$ & $x_2$ & $Pr(\cdot \mid x_0,x_1)$ \\
+$x_0,x_1,x_2$ & $x_3$ & $Pr(\cdot \mid x_0,x_1,x_2)$
+\end{tabular}
+\end{center}
+
+Quindi, alla prima riga della matrice delle probabilità vi sarà
+$Pr(\cdot \mid x_0)$, alla seconda $Pr(\cdot \mid x_0,x_1)$ e così via.
+La probabilità del token corretto alla prima posizione sarà quindi
+$Pr(x_1 \mid x_0)$, alla seconda $Pr(x_2 \mid x_0,x_1)$, ecc., perchè quello che voglio è che per ogni token, predirre il prossimo token della sequenza.
+
+\subsubsection{Log-likelihood}
+
+Sia dato un dataset di addestramento $\mathcal{D}$ composto da $K$
+sequenze. La verosimiglianza logaritmica (log-likelihood) per una
+sequenza $x = x_0,\dots,x_m$ in $\mathcal{D}$ è definita come:
+
+\begin{equation}
+\mathcal{J}_\theta(x)
+=
+\sum_{i=1}^{m}
+\log Pr_\theta(x_i \mid x_0,\dots,x_{i-1})
+\end{equation}
+
+dove il pedice $\theta$ indica i parametri ottimizzabili del modello
+linguistico.
+
+\textbf{NOTA:} l'indice parte da $1$ perché $x_0$ è il token di inizio
+della sequenza (BOS). Di conseguenza, possiamo considerare:
+
+\begin{equation}
+Pr(x_0)=1
+\end{equation}
+
+e quindi:
+
+\begin{equation}
+\log Pr(x_0)=\log(1)=0
+\end{equation}
+
+Pertanto, il termine relativo a $x_0$ non contribuisce alla
+log-likelihood.
+
+\subsubsection{Obiettivo dell'addestramento}
+
+L'obiettivo dell'addestramento, detto \textbf{Maximum Likelihood
+Training}, è trovare i parametri $\hat{\theta}$ che massimizzano la
+log-likelihood totale su tutto il dataset:
+
+\begin{equation}
+\hat{\theta}
+=
+\arg\max_\theta
+\sum_{x \in \mathcal{D}}
+\mathcal{J}_\theta(x)
+\end{equation}
+
+In altre parole, il modello deve imparare dei parametri $\theta$ tali
+da assegnare una probabilità elevata ai token corretti nelle sequenze
+del dataset.
+
+\subsubsection{Dal Transformer alla log-likelihood}
+
+La formula precedente definisce \textbf{l'obiettivo matematico}
+dell'addestramento, ma non descrive ancora come i parametri del
+Transformer vengono effettivamente modificati.
+
+Il processo di addestramento può essere schematizzato come:
+
+\begin{equation}
+\boxed{
+\text{Forward Pass}
+\rightarrow
+\text{Loss}
+\rightarrow
+\text{Backpropagation}
+\rightarrow
+\text{Aggiornamento dei parametri}
+}
+\end{equation}
+
+\paragraph{1. Forward Pass}
+
+La sequenza viene fornita al Transformer:
+
+\begin{equation}
+X
+\overset{\text{Transformer}_\theta}{\longrightarrow}
+H^L
+\end{equation}
+
+dove $H^L$ è la matrice delle rappresentazioni prodotta dall'ultimo
+blocco Transformer.
+
+Successivamente viene applicato il livello finale che proietta le
+rappresentazioni nello spazio del vocabolario:
+
+\begin{equation}
+Z = H^L W^O
+\end{equation}
+
+dove $W^O$ è la matrice dei pesi dell'ultimo livello e $Z$ contiene
+i cosiddetti \textit{logits}.
+
+Applicando la funzione Softmax otteniamo:
+
+\begin{equation}
+P_\theta = \operatorname{Softmax}(Z)
+\end{equation}
+
+dove ogni riga di $P_\theta$ rappresenta una distribuzione di
+probabilità sui possibili token successivi.
+
+Pertanto:
+
+\begin{equation}
+P_\theta =
+\begin{bmatrix}
+Pr_\theta(\cdot \mid x_0) \\
+Pr_\theta(\cdot \mid x_0,x_1) \\
+\vdots \\
+Pr_\theta(\cdot \mid x_0,\dots,x_{m-1})
+\end{bmatrix}
+\end{equation}
+
+\paragraph{2. Calcolo della Loss}
+
+Durante l'addestramento non vogliamo semplicemente ottenere una
+distribuzione di probabilità: vogliamo che la probabilità assegnata al
+token corretto sia elevata.
+
+Per questo motivo consideriamo, per ogni posizione, la probabilità
+assegnata al token corretto:
+
+\begin{equation}
+Pr_\theta(x_i \mid x_0,\dots,x_{i-1})
+\end{equation}
+
+La log-likelihood è:
+
+\begin{equation}
+\mathcal{J}_\theta(x)
+=
+\sum_{i=1}^{m}
+\log Pr_\theta(x_i \mid x_0,\dots,x_{i-1})
+\end{equation}
+
+Poiché gli algoritmi di ottimizzazione vengono normalmente formulati
+come problemi di \textbf{minimizzazione}, si introduce la
+\textbf{negative log-likelihood} (NLL):
+
+\begin{equation}
+\mathcal{L}(\theta)
+=
+-\mathcal{J}_\theta(x)
+\end{equation}
+
+e quindi:
+
+\begin{equation}
+\boxed{
+\mathcal{L}(\theta)
+=
+-\sum_{i=1}^{m}
+\log Pr_\theta(x_i \mid x_0,\dots,x_{i-1})
+}
+\end{equation}
+
+Questa quantità corrisponde, nel caso della predizione del token
+successivo, alla \textbf{Cross-Entropy Loss}.
+
+Se il modello assegna una probabilità elevata al token corretto,
+il termine:
+
+\begin{equation}
+-\log Pr_\theta(x_i \mid x_0,\dots,x_{i-1})
+\end{equation}
+
+sarà piccolo.
+
+Viceversa, se il modello assegna una probabilità bassa al token
+corretto, il termine sarà grande.
+
+Ad esempio:
+
+\begin{equation}
+Pr_\theta(x_i \mid x_0,\dots,x_{i-1}) = 0.9
+\quad\Rightarrow\quad
+-\log(0.9) \approx 0.105
+\end{equation}
+
+mentre:
+
+\begin{equation}
+Pr_\theta(x_i \mid x_0,\dots,x_{i-1}) = 0.1
+\quad\Rightarrow\quad
+-\log(0.1) \approx 2.303
+\end{equation}
+
+Quindi la loss penalizza maggiormente il modello quando assegna una
+bassa probabilità al token corretto.
+
+\paragraph{3. Backpropagation}
+
+La loss dipende dai parametri $\theta$ del Transformer. Possiamo quindi
+calcolare il gradiente della loss rispetto a tali parametri:
+
+\begin{equation}
+\nabla_\theta \mathcal{L}(\theta)
+\end{equation}
+
+Il gradiente viene calcolato tramite il processo di
+\textbf{backpropagation}, che permette di determinare come ogni
+parametro del modello ha contribuito alla loss.
+
+In particolare, il gradiente indica come modificare i parametri per
+ridurre la loss.
+
+\paragraph{4. Aggiornamento dei parametri}
+
+Un algoritmo di ottimizzazione, ad esempio \textbf{Adam}, utilizza il
+gradiente per aggiornare i parametri del Transformer.
+
+Concettualmente, un aggiornamento tramite gradient descent può essere
+scritto come:
+
+\begin{equation}
+\boxed{
+\theta
+\leftarrow
+\theta - \eta \nabla_\theta \mathcal{L}(\theta)
+}
+\end{equation}
+
+dove $\eta$ è il \textit{learning rate}.
+
+In questo modo i parametri vengono modificati affinché, al successivo
+forward pass, il modello tenda ad assegnare una probabilità maggiore
+ai token corretti.
+
+\subsubsection{Esempio completo}
+
+Consideriamo nuovamente la sequenza:
+
+\begin{equation}
+[BOS,\ \text{Il},\ \text{gatto},\ \text{corre}]
+\end{equation}
+
+Il Transformer riceve l'intera sequenza contemporaneamente.
+
+Grazie alla causal mask, vengono prodotte contemporaneamente le
+seguenti predizioni:
+
+\begin{equation}
+Pr_\theta(\text{Il}\mid BOS)
+\end{equation}
+
+\begin{equation}
+Pr_\theta(\text{gatto}\mid BOS,\text{Il})
+\end{equation}
+
+\begin{equation}
+Pr_\theta(\text{corre}\mid BOS,\text{Il},\text{gatto})
+\end{equation}
+
+Supponiamo che il modello produca:
+
+\begin{equation}
+Pr_\theta(\text{Il}\mid BOS)=0.7
+\end{equation}
+
+\begin{equation}
+Pr_\theta(\text{gatto}\mid BOS,\text{Il})=0.2
+\end{equation}
+
+\begin{equation}
+Pr_\theta(\text{corre}\mid BOS,\text{Il},\text{gatto})=0.8
+\end{equation}
+
+La log-likelihood della sequenza è quindi:
+
+\begin{equation}
+\mathcal{J}_\theta(x)
+=
+\log(0.7)+\log(0.2)+\log(0.8)
+\end{equation}
+
+e la corrispondente loss è:
+
+\begin{equation}
+\mathcal{L}(\theta)
+=
+-\log(0.7)-\log(0.2)-\log(0.8)
+\end{equation}
+
+La loss viene quindi utilizzata per calcolare il gradiente rispetto
+ai parametri $\theta$ del Transformer. Attraverso la backpropagation,
+questo gradiente viene propagato attraverso tutti i componenti del
+modello, fino ai suoi parametri.
+
+Infine, un ottimizzatore come Adam aggiorna i parametri:
+
+\begin{equation}
+\theta
+\leftarrow
+\theta-\eta\nabla_\theta\mathcal{L}(\theta)
+\end{equation}
+
+Il processo viene ripetuto su moltissime sequenze del dataset,
+aggiornando progressivamente i parametri del modello.
+
+\begin{warning}
+Durante il training, il modello \textbf{non deve necessariamente
+generare un token alla volta}. L'intera sequenza può essere fornita
+contemporaneamente al Transformer.
+
+La causal mask impedisce però a ciascuna posizione di utilizzare
+informazioni provenienti dai token futuri. In questo modo, dalla stessa
+sequenza, il modello può imparare contemporaneamente a predire tutti
+i token successivi.
+\end{warning}
+
+In sintesi, l'intero processo di addestramento può essere rappresentato
+come:
+
+\begin{equation}
+\boxed{
+X
+\rightarrow
+\text{Transformer}_\theta
+\rightarrow
+\text{Logits}
+\rightarrow
+\text{Softmax}
+\rightarrow
+\text{Probabilità}
+\rightarrow
+\text{Loss}
+\rightarrow
+\text{Backpropagation}
+\rightarrow
+\text{Aggiornamento di }\theta
+}
+\end{equation}
+
+L'obiettivo finale è ottenere parametri $\hat{\theta}$ tali che il
+modello assegni alta probabilità ai token corretti:
+
+\begin{equation}
+\boxed{
+\hat{\theta}
+=
+\arg\max_\theta
+\sum_{x\in\mathcal{D}}
+\mathcal{J}_\theta(x)
+}
+\end{equation}
+
+ovvero, equivalentemente, minimizzare la negative log-likelihood
+sull'intero dataset.
 
 \subsection{Fine-tuning e Applicazione degli LLM (Fine-tuning and Applying LLMs)}
+
+
+
 Una volta effettuato il pre-addestramento, l'LLM ha incamerato vaste conoscenze testuali, ma solitamente non è specializzato per eseguire task o seguire comandi dell'utente. Nell'era dell'AI generativa, gli LLM sono usati come sistemi completi: formuliamo un problema in linguaggio naturale (il \textit{prompt}) e lasciamo che il modello lo completi autoregressivamente.
 
-Formalmente, dato un prompt utente $x = x_0 \dots x_m$ (il contesto), la generazione della risposta $y = y_1 \dots y_n$ consiste nel trovare la sequenza ottimale $\hat{y}$:
+\textbf{Quindi qua già abbiamo affrontato la fase di allenamento, abbiamo pesi fissi, e stiamo affrontando la fase di generazione}
+
+Formalmente, dato un prompt utente
+\[
+x = x_0,\ldots,x_m
+\]
+che rappresenta il contesto, e una risposta
+\[
+y = y_1,\ldots,y_n,
+\]
+la generazione consiste nel trovare la sequenza di token $\hat{y}$ più probabile dato il contesto $x$:
+
 \begin{equation}
-\hat{y} = \arg\max_y \log Pr(y | x) = \arg\max_y \sum_{i=1}^n \log Pr(y_i | x_0, \dots, x_m, y_1, \dots, y_{i-1})
+\hat{y}
+=
+\arg\max_y \Pr(y\mid x).
 \end{equation}
-Per semplificare l'interazione, si utilizzano frequentemente i \textbf{prompt template}, ovvero stringhe di testo fisse con delle variabili segnaposto.
-\begin{example}
-Se vogliamo valutare la grammatica di una frase, potremmo usare il template:\
-\texttt{{*sentence*}} \
-\texttt{Question: Is this sentence grammatically correct?} \
-\texttt{Answer: }
-\end{example}
 
-Sebbene l'approccio diretto mostri spiccate abilità di "zero-shot learning" (dove il modello risolve compiti per i quali non è stato esplicitamente addestrato), la vera efficacia si sprigiona con il \textbf{fine-tuning basato su istruzioni (Instruction Fine-tuning)}.
+Poiché il logaritmo è una funzione monotona crescente, massimizzare la probabilità equivale a massimizzarne il logaritmo:
 
-Il fine-tuning prevede l'utilizzo di un dataset ridotto e curato, $\mathcal{D}_{tune}$, contenente tuple formate da un input (\textit{instruction + user info}) e da un output desiderato. Matematicamente, partendo dai pesi pre-addestrati $\hat{\theta}$, procediamo ad ottimizzare ulteriormente il modello (chiameremo lo stato di transizione $\hat{\theta}^+$):
 \begin{equation}
-\tilde{\theta} = \arg\max_{\hat{\theta}^+} \sum_{sample \in \mathcal{D}*{tune}} \mathcal{F}*{\hat{\theta}^+}(sample)
+\hat{y}
+=
+\arg\max_y \log \Pr(y\mid x).
 \end{equation}
-Per un singolo campione composto da prompt e risposta, $sample = [x_{sample}, y_{sample}]$, la funzione obiettivo valuta la probabilità condizionata della \textit{sola porzione di output}:
+
+Per comprendere come viene calcolata $\Pr(y\mid x)$, è necessario ricordare che $y$ non è un singolo elemento, ma una sequenza di token:
+\[
+y=(y_1,\ldots,y_n).
+\]
+
+Pertanto,
+
 \begin{equation}
-\mathcal{F}*{\hat{\theta}^+}(sample) = \log Pr*{\hat{\theta}^+}(y_{sample} | x_{sample})
+\Pr(y\mid x)
+=
+\Pr(y_1,\ldots,y_n\mid x).
 \end{equation}
-\begin{observation}
-\textbf{Passaggio logico esplicitato:} Durante il passo di backpropagation per il fine-tuning, calcoliamo l'errore ed i relativi gradienti esclusivamente sulle predizioni riguardanti la sequenza di output $y_{sample}$. I token relativi all'input $x_{sample}$ (il prompt stesso) sono processati in modalità "forward" per costruire il contesto utile all'attenzione, ma il modello non è penalizzato se non predice esattamente i token dell'istruzione, concentrando così lo sforzo di aggiornamento dei pesi unicamente su come la risposta aderisce alla richiesta.
-\end{observation}
 
-\subsection{Allineamento degli LLM con il mondo reale (Aligning LLMs with the World)}
-Riuscire a far seguire le istruzioni ad un LLM tramite fine-tuning (Supervised Fine-Tuning, SFT) è utile, ma non sufficiente a garantire la sua sicurezza in produzione. Il modello potrebbe ancora generare testi contenenti informazioni non fattuali, di parte o pericolose (e.g., indicazioni per creare armi).
+A questo punto si applica la \textbf{chain rule della probabilità}. In generale, per una sequenza di variabili aleatorie vale:
 
-\begin{definition}{Allineamento (Alignment)}
-Il processo volto a guidare e vincolare il comportamento degli LLM affinché le loro risposte siano in sintonia con i valori etici, la verità e le aspettative degli esseri umani (sicurezza e innocuità).
-\end{definition}
+\begin{equation}
+\Pr(A_1,\ldots,A_n)
+=
+\prod_{i=1}^{n}
+\Pr(A_i\mid A_1,\ldots,A_{i-1}).
+\end{equation}
 
-L'approccio più comune per raggiungere questo scopo è l'apprendimento per rinforzo basato sui feedback umani, noto come \textbf{RLHF (Reinforcement Learning from Human Feedback)}. Questo paradigma modella l'interazione in termini di Reinforcement Learning:
+Applicando questa regola alla sequenza $y$ condizionata al contesto $x$, otteniamo:
+
+\begin{equation}
+\Pr(y_1,\ldots,y_n\mid x)
+=
+\prod_{i=1}^{n}
+\Pr(y_i\mid x,y_1,\ldots,y_{i-1}).
+\end{equation}
+
+Quindi la probabilità dell'intera risposta è ottenuta come prodotto delle probabilità condizionate dei singoli token:
+
+\begin{equation}
+\boxed{
+\Pr(y\mid x)
+=
+\prod_{i=1}^{n}
+\Pr(y_i\mid x,y_1,\ldots,y_{i-1})
+}
+\end{equation}
+
+Questa decomposizione esprime il principio fondamentale della \textbf{generazione autoregressiva}: per generare il token $y_i$, il modello utilizza il prompt $x$ e tutti i token della risposta generati precedentemente.
+
+\subsubsection*{Passaggio dal prodotto alla sommatoria}
+
+La formula precedente contiene un prodotto di probabilità. Tuttavia, lavorare direttamente con prodotti può essere numericamente scomodo, soprattutto quando la sequenza è lunga. Per questo si considera il logaritmo della probabilità.
+
+Applicando il logaritmo alla decomposizione precedente:
+
+\begin{equation}
+\log \Pr(y\mid x)
+=
+\log
+\left(
+\prod_{i=1}^{n}
+\Pr(y_i\mid x,y_1,\ldots,y_{i-1})
+\right).
+\end{equation}
+
+Utilizzando la proprietà del logaritmo
+
+\begin{equation}
+\log(ab)=\log a+\log b,
+\end{equation}
+
+e, più in generale,
+
+\begin{equation}
+\log\left(\prod_i a_i\right)
+=
+\sum_i \log a_i,
+\end{equation}
+
+si ottiene:
+
+\begin{equation}
+\boxed{
+\log \Pr(y\mid x)
+=
+\sum_{i=1}^{n}
+\log
+\Pr(y_i\mid x,y_1,\ldots,y_{i-1})
+}
+\end{equation}
+
+Pertanto, l'obiettivo della generazione può essere scritto come:
+
+\begin{equation}
+\boxed{
+\hat{y}
+=
+\arg\max_y
+\sum_{i=1}^{n}
+\log
+\Pr(y_i\mid x,y_1,\ldots,y_{i-1})
+}
+\end{equation}
+
+che corrisponde alla formulazione mostrata nell'Eq. (4.39).
+
+Per semplicità, indicando con
+
+\[
+y_{<i}=y_1,\ldots,y_{i-1},
+\]
+
+la stessa equazione può essere scritta in forma compatta:
+
+\begin{equation}
+\boxed{
+\hat{y}
+=
+\arg\max_y
+\sum_{i=1}^{n}
+\log
+\Pr(y_i\mid x,y_{<i})
+}
+\end{equation}
+
+Pertanto in finale si vuole trovare l'$y$ che massimizza $Pr(y | x)$, cioè ovviamente la generazione, dopo l'allenamento vuole massimizzare l'$y$ che caccia fuori in quel modo.
+
+\subsubsection*{Interpretazione nel Decoder-Only Transformer}
+
+Nel caso di un \textbf{Decoder-Only Transformer}, come quelli utilizzati negli LLM autoregressivi, il termine
+
+\[
+\Pr(y_i\mid x,y_{<i})
+\]
+
+rappresenta la distribuzione di probabilità prevista dal modello per il prossimo token, dato tutto il contesto disponibile fino a quel momento.
+
+Indicando con
+
+\[
+c_i=(x_0,\ldots,x_m,y_1,\ldots,y_{i-1})
+\]
+
+il contesto disponibile al passo $i$, il modello calcola:
+
+\begin{equation}
+\Pr(y_i\mid c_i).
+\end{equation}
+
+Il Transformer riceve quindi la sequenza dei token precedenti e produce, attraverso i propri strati di self-attention e feed-forward, una rappresentazione del contesto. Tale rappresentazione viene trasformata in una distribuzione di probabilità sui token del vocabolario:
+
+\begin{equation}
+c_i
+\longrightarrow
+\text{Transformer}
+\longrightarrow
+\text{logits}
+\longrightarrow
+\text{softmax}
+\longrightarrow
+\Pr(\text{token}\mid c_i).
+\end{equation}
+
+In particolare, se $\mathbf{z}_i$ rappresenta il vettore dei logits prodotto dal modello al passo $i$, la distribuzione sul vocabolario $V$ viene ottenuta tramite la funzione softmax:
+
+\begin{equation}
+\Pr(v\mid c_i)
+=
+\frac{\exp(z_{i,v})}
+{\sum_{u\in V}\exp(z_{i,u})},
+\qquad v\in V.
+\end{equation}
+
+Il modello utilizza quindi la probabilità associata al token corretto $y_i$:
+
+\begin{equation}
+\Pr(y_i\mid c_i).
+\end{equation}
+
+Durante la generazione, il token successivo viene scelto in base a questa distribuzione e successivamente aggiunto al contesto. Il processo viene quindi ripetuto autoregressivamente:
+
+\begin{align*}
+c_1 &\rightarrow \Pr(y_1\mid c_1) \rightarrow y_1,\\
+c_2 &\rightarrow \Pr(y_2\mid c_2) \rightarrow y_2,\\
+&\vdots\\
+c_n &\rightarrow \Pr(y_n\mid c_n) \rightarrow y_n.
+\end{align*}
+
+La \textbf{causal self-attention} garantisce che, nel momento in cui il modello predice $y_i$, non possa accedere ai token futuri $y_i,\ldots,y_n$. Il modello può quindi utilizzare solamente il prompt e i token precedentemente generati.
+
+
+Un secondo metodo fondamentale per applicare gli LLM — divenuto lo standard de facto nella ricerca recente — consiste nell'adattare i modelli tramite un processo di affinamento dei parametri (fine-tuning). In questo modo, la capacità di predizione dei token appresa nella fase di pre-addestramento (pre-training) viene generalizzata per svolgere nuovi compiti specifici (downstream tasks).
+
+\textbf{Principio sottostante:} Durante il pre-addestramento, il modello acquisisce una conoscenza generale della lingua (general knowledge of language); tuttavia, è necessario un meccanismo per attivare tale conoscenza e indirizzarla verso compiti specifici. Per ottenere ciò, si esegue un lieve aggiornamento dei parametri del modello utilizzando dati che mostrano come seguire le istruzioni (instruction-following data). Questo approccio prende il nome di instruction fine-tuning 
+(o instruction tuning), nel paragrafo di dopo ci sono alcune istruzioni come esempi.
+
+\subsubsection{Esempi Pratici di Campioni per l'Instruction Fine-Tuning}
+Per comprendere la struttura dei dati di instruction fine-tuning, il testo presenta diversi esempi di coppia istruzione-risposta:
+
 \begin{itemize}
-\item \textbf{Agente (Policy):} L'LLM stesso, che agisce nell'ambiente generando testi condizionati al prompt utente con probabilità $Pr(y\vert{}x)$.
-\item \textbf{Modello di Ricompensa (Reward Model):} Una rete addestrata a imitare il giudizio umano. Valuta l'output generato dall'agente assegnandogli un punteggio scalare continuo, che funge da segnale (reward) sulla qualità e la sicurezza del testo.
+    \item \textbf{Generazione di Risposte Testuali / Ricette:} \\
+    Prompt / Istruzione ($x$): "Show me a recipe for making ice cream." \\
+    Risposta Target ($y$): Lista strutturata di ingredienti e passaggi sequenziali (Ingredients: 2 cups heavy cream... Steps: 1. Whisk all ingredients...).
+    
+    \item \textbf{Risoluzione di Problemi / Ragionamento Matematico:} \\
+    Prompt / Istruzione ($x$): "If you buy 5 apples and each apple costs \$1.20, how much do you spend in total?" \\
+    Risposta Target ($y$): "\$6.00".
+    
+    \item \textbf{Generazione di Codice (Code Generation):} \\
+    Prompt / Istruzione ($x$): "Write a Python program to calculate the sum of squares of the following numbers. 1, 2, 10, -9, 78" \\
+    Risposta Target ($y$):
+\begin{verbatim}
+numbers = [1, 2, 10, -9, 78]
+sum_of_squares = sum(x**2 for x in numbers)
+print(sum_of_squares)
+\end{verbatim}
 \end{itemize}
 
-\begin{figure}[h]
-\centering
-\includegraphics[width=0.8\textwidth]{_files/_images/Figure_2.2.png}
-\caption{Panoramica del ciclo di RLHF. A) Si apprende un LLM iniziale (policy) tramite pre-training e SFT; B) Si raccolgono dati annotando gli output generati dall'LLM con preferenze umane; C) Si addestra un Reward Model con tali classifiche; D) Si esegue l'RL fine-tuning della policy guidata dal Reward Model.}
-\end{figure}
+\section*{Formulazione Matematica dell'Obiettivo di Fine-Tuning}
 
-Il flusso di lavoro dell'RLHF è composto da quattro passaggi chiave:
-\begin{enumerate}
-\item Costruzione di una policy iniziale (tramite pre-training e SFT).
-\item Il modello genera diverse risposte alternative allo stesso prompt. Esperti umani vengono incaricati di valutare gli output stilando un ordinamento basato sulle preferenze e la sicurezza (ad esempio $y_1 \succ y_4 \succ y_2 \succ y_3$). Si preferisce l'ordinamento (ranking) all'assegnazione di un punteggio arbitrario perché è cognitivamente meno ambiguo e non richiede standard numerici complessi.
-\item Addestramento del Modello di Ricompensa $R_\omega(x, y)$ con parametri $\omega$, il quale riceve in ingresso il contesto concatenato all'output prodotto dall'agente. Il modello viene addestrato tramite una \textbf{loss di ranking a coppie} su un dataset di ordinamenti $\mathcal{D}_r$:
+Una volta curato il dataset di istruzioni $\mathcal{D}_{tune}$, il processo di ottimizzazione può essere concettualizzato come un addestramento standard di reti neurali analogo al pre-addestramento, ma eseguito su un insieme di dati molto più ridotto.
+
+Sia $\hat{\theta}$ l'insieme dei parametri del modello ottimizzati durante la fase di pre-addestramento. Modificando l'obiettivo di pre-addestramento dell'Equazione (2.14), si definisce l'obiettivo del fine-tuning come:
+
 \begin{equation}
-Loss_\omega(\mathcal{D}*r) = -\mathbb{E}*{(x, y_{k_1}, y_{k_2}) \sim \mathcal{D}*r} \log(Sigmoid(R*\omega(x, y_{k_1}) - R_\omega(x, y_{k_2})))
+\tilde{\theta}
+=
+\arg\max_{\hat{\theta}^+}
+\sum_{sample \in \mathcal{D}_{tune}}
+J_{\hat{\theta}^+}(sample)
+\tag{2.16}
 \end{equation}
-Questa loss penalizza il modello se predice un divario di ricompensa negativo tra l'output preferito ($y_{k_1}$) e quello scartato ($y_{k_2}$), guidando la rete ad assegnare sempre score più alti ai testi che l'uomo ritiene migliori.
-\item Si esegue un fine-tuning mediante Reinforcement Learning (RL) basandosi sulle ricompense calcolate dal reward model appena addestrato. L'obiettivo per l'LLM iniziale pre-addestrato $\hat{\theta}^+$ diventa massimizzare il valore atteso della ricompensa su un dataset di input $\mathcal{D}_{rlft}$:
+
+\textbf{Simbologia:}
+
+\begin{itemize}
+
+    \item $\tilde{\theta}$ rappresenta l'insieme dei parametri ottimi risultanti dal fine-tuning.
+
+    \item La notazione $\hat{\theta}^+$ indica esplicitamente che il processo di ottimizzazione parte dai parametri pre-addestrati $\hat{\theta}$ (e non da un'inizializzazione casuale).
+
+\end{itemize}
+
+In altre parole, il processo può essere visto come una sequenza di due fasi:
+
 \begin{equation}
-\tilde{\theta} = \arg\max_{\hat{\theta}^+} \mathbb{E}*{(x, y*{\hat{\theta}^+}) \sim \mathcal{D}*{rlft}} R*{\hat{\omega}}(x, y_{\hat{\theta}^+})
+\boxed{
+\text{Pre-training}
+\longrightarrow
+\hat{\theta}
+\longrightarrow
+\text{Fine-tuning}
+\longrightarrow
+\tilde{\theta}
+}
 \end{equation}
-(Per stabilizzare tale processo, in pratica vengono usati algoritmi matematici avanzati come la Proximal Policy Optimization, o PPO).
-\end{enumerate}
+
+Il fine-tuning non addestra quindi un modello partendo da zero: sfrutta le conoscenze linguistiche apprese durante il pre-training e modifica i parametri del modello per adattarlo al comportamento desiderato.
+
+\section*{Decomposizione del Campione e Calcolo della Loss}
+
+Ogni campione $sample \in \mathcal{D}_{tune}$ viene suddiviso in due parti: un segmento di input $x_{sample}$ e un segmento di output $y_{sample}$:
+
+\begin{equation}
+sample = [x_{sample}, y_{sample}]
+\tag{2.17}
+\end{equation}
+
+Ad esempio, un campione del dataset può essere:
+
+\begin{quote}
+\textbf{Input:} Traduci in inglese: ``Il gatto è sul tavolo.''
+
+\textbf{Output:} ``The cat is on the table.''
+\end{quote}
+
+In questo caso:
+
+\begin{equation}
+x_{sample}
+=
+\text{``Traduci in inglese: Il gatto è sul tavolo.''}
+\end{equation}
+
+mentre:
+
+\begin{equation}
+y_{sample}
+=
+\text{``The cat is on the table.''}
+\end{equation}
+
+La funzione di log-verosimiglianza $J_{\hat{\theta}^+}(sample)$ viene definita come:
+
+\begin{equation}
+J_{\hat{\theta}^+}(sample)
+=
+\log Pr_{\hat{\theta}^+}(y_{sample} \mid x_{sample})
+\tag{2.18}
+\end{equation}
+
+Questa espressione indica la log-probabilità che il modello assegna alla
+risposta desiderata $y_{sample}$, quando riceve come input
+$x_{sample}$.
+
+\subsection*{Probabilità della Risposta}
+
+Poiché il modello è autoregressivo, la probabilità dell'intera risposta
+viene scomposta nella probabilità dei singoli token che la compongono.
+
+Sia:
+
+\begin{equation}
+y_{sample}
+=
+[y_1,y_2,\dots,y_m]
+\end{equation}
+
+Allora, utilizzando la chain rule della probabilità:
+
+\begin{equation}
+Pr_{\hat{\theta}^+}(y_{sample}\mid x_{sample})
+=
+\prod_{i=1}^{m}
+Pr_{\hat{\theta}^+}
+\left(
+y_i
+\mid
+x_{sample},y_1,\dots,y_{i-1}
+\right)
+\end{equation}
+
+Di conseguenza, applicando il logaritmo:
+
+\begin{equation}
+\boxed{
+J_{\hat{\theta}^+}(sample)
+=
+\sum_{i=1}^{m}
+\log
+Pr_{\hat{\theta}^+}
+\left(
+y_i
+\mid
+x_{sample},y_1,\dots,y_{i-1}
+\right)
+}
+\end{equation}
+
+Quindi, anche durante il fine-tuning, il Decoder Only Transformer
+continua a imparare attraverso la \textbf{predizione autoregressiva del
+token successivo}. La differenza è che il modello viene addestrato a
+produrre una specifica risposta $y_{sample}$ data una determinata
+istruzione $x_{sample}$.
+
+\subsection*{Esempio di Predizione Autoregressiva}
+
+Consideriamo il seguente campione:
+
+\begin{equation}
+x_{sample}
+=
+\text{``Traduci in inglese: Il gatto è sul tavolo.''}
+\end{equation}
+
+e:
+
+\begin{equation}
+y_{sample}
+=
+[\text{The},\text{cat},\text{is},\text{on},\text{the},\text{table}]
+\end{equation}
+
+La probabilità della risposta completa viene calcolata come:
+
+\begin{align}
+Pr(y_{sample}\mid x_{sample})
+={}&
+Pr(\text{The}\mid x_{sample})
+\\
+&\cdot
+Pr(\text{cat}\mid x_{sample},\text{The})
+\\
+&\cdot
+Pr(\text{is}\mid x_{sample},\text{The},\text{cat})
+\\
+&\cdot
+Pr(\text{on}\mid x_{sample},\text{The},\text{cat},\text{is})
+\\
+&\cdot
+Pr(\text{the}\mid x_{sample},\text{The},\text{cat},\text{is},\text{on})
+\\
+&\cdot
+Pr(\text{table}\mid x_{sample},\text{The},\text{cat},\text{is},\text{on},\text{the})
+\end{align}
+
+Pertanto, la log-verosimiglianza è:
+
+\begin{align}
+J_{\hat{\theta}^+}(sample)
+={}&
+\log Pr(\text{The}\mid x_{sample})
+\\
+&+
+\log Pr(\text{cat}\mid x_{sample},\text{The})
+\\
+&+
+\log Pr(\text{is}\mid x_{sample},\text{The},\text{cat})
+\\
+&+\dots
+\end{align}
+
+L'obiettivo del fine-tuning è quindi fare in modo che il modello
+assegni una probabilità elevata ai token della risposta desiderata.
+
+\section*{Dalla Log-Likelihood alla Loss}
+
+L'obiettivo matematico precedente è formulato come un problema di
+\textbf{massimizzazione}:
+
+\begin{equation}
+\max_{\theta} J_\theta(sample)
+\end{equation}
+
+Tuttavia, gli algoritmi di ottimizzazione delle reti neurali vengono
+normalmente formulati come problemi di \textbf{minimizzazione}. Per
+questo motivo si considera la \textbf{Negative Log-Likelihood (NLL)}:
+
+\begin{equation}
+\boxed{
+\mathcal{L}_{\hat{\theta}^+}(sample)
+=
+-
+J_{\hat{\theta}^+}(sample)
+}
+\end{equation}
+
+ovvero:
+
+\begin{equation}
+\boxed{
+\mathcal{L}_{\hat{\theta}^+}(sample)
+=
+-
+\sum_{i=1}^{m}
+\log
+Pr_{\hat{\theta}^+}
+\left(
+y_i
+\mid
+x_{sample},y_1,\dots,y_{i-1}
+\right)
+}
+\end{equation}
+
+Questa loss corrisponde alla \textbf{Cross-Entropy Loss} utilizzata
+per la predizione dei token.
+
+Se il modello assegna una probabilità elevata al token corretto, il
+corrispondente termine della loss sarà piccolo:
+
+\begin{equation}
+Pr(y_i\mid\cdots)=0.9
+\quad\Longrightarrow\quad
+-\log(0.9)\approx0.105
+\end{equation}
+
+Viceversa, se assegna una probabilità bassa:
+
+\begin{equation}
+Pr(y_i\mid\cdots)=0.1
+\quad\Longrightarrow\quad
+-\log(0.1)\approx2.303
+\end{equation}
+
+Pertanto, durante il fine-tuning, il modello viene incentivato ad
+assegnare probabilità elevate ai token della risposta desiderata.
+
+\section*{Ottimizzazione dei Parametri}
+
+Il processo di fine-tuning segue quindi un procedimento analogo a
+quello del pre-training:
+
+\begin{equation}
+\boxed{
+\text{Input}
+\rightarrow
+\text{Transformer}
+\rightarrow
+\text{Probabilità dei token}
+\rightarrow
+\text{Loss}
+\rightarrow
+\text{Backpropagation}
+\rightarrow
+\text{Aggiornamento dei parametri}
+}
+\end{equation}
+
+In particolare, per un campione $(x_{sample},y_{sample})$, il modello
+esegue un \textbf{forward pass} e calcola:
+
+\begin{equation}
+\mathcal{L}_{\hat{\theta}^+}(sample)
+=
+-\log
+Pr_{\hat{\theta}^+}
+(y_{sample}\mid x_{sample})
+\end{equation}
+
+Successivamente viene calcolato il gradiente:
+
+\begin{equation}
+\nabla_\theta
+\mathcal{L}_{\hat{\theta}^+}(sample)
+\end{equation}
+
+tramite la \textbf{backpropagation}.
+
+Un algoritmo di ottimizzazione, come Adam, utilizza quindi il gradiente
+per modificare i parametri del modello. Concettualmente:
+
+\begin{equation}
+\theta
+\leftarrow
+\theta-\eta\nabla_\theta\mathcal{L}(\theta)
+\end{equation}
+
+Il processo viene ripetuto sui campioni del dataset
+$\mathcal{D}_{tune}$, fino a ottenere i parametri $\tilde{\theta}$.
+
+\section*{Differenza Fondamentale con il Pre-training}
+
+A differenza del pre-addestramento, nel fine-tuning supervisionato per
+istruzioni ogni campione è organizzato esplicitamente come una coppia:
+
+\begin{equation}
+\boxed{
+\text{Input }x_{sample}
+\quad\longrightarrow\quad
+\text{Output desiderato }y_{sample}
+}
+\end{equation}
+
+Nel pre-training, invece, il testo stesso fornisce automaticamente i
+target attraverso la predizione del token successivo.
+
+Ad esempio, nel pre-training:
+
+\begin{equation}
+[x_0,x_1,x_2]
+\longrightarrow
+[x_1,x_2,x_3]
+\end{equation}
+
+mentre nel fine-tuning:
+
+\begin{equation}
+\underbrace{[x_{sample}]}_{\text{istruzione}}
+\longrightarrow
+\underbrace{[y_1,y_2,\dots,y_m]}_{\text{risposta desiderata}}
+\end{equation}
+
+In entrambi i casi, tuttavia, un Decoder Only Transformer utilizza la
+predizione autoregressiva dei token.
+
+La differenza principale riguarda quindi \textbf{quali token vengono
+considerati come target della loss}.
+
+\begin{warning}
+Nel fine-tuning per istruzioni, la loss viene calcolata esclusivamente
+sui token della risposta $y_{sample}$ e non sui token dell'istruzione
+$x_{sample}$.
+
+L'input $x_{sample}$ fornisce il contesto necessario per predire la
+risposta, mentre i token di $y_{sample}$ costituiscono i target rispetto
+ai quali viene calcolata la loss.
+\end{warning}
+
+In sintesi:
+
+\begin{equation}
+\boxed{
+\begin{array}{c}
+\textbf{Pre-training}\\
+\text{Testo non annotato}
+\\
+\downarrow
+\\
+\text{Next-token prediction}
+\\
+\downarrow
+\\
+\hat{\theta}
+\end{array}
+}
+\qquad
+\Longrightarrow
+\qquad
+\boxed{
+\begin{array}{c}
+\textbf{Fine-tuning}\\
+\text{Istruzioni + risposte}
+\\
+\downarrow
+\\
+Pr(y_{sample}\mid x_{sample})
+\\
+\downarrow
+\\
+\tilde{\theta}
+\end{array}
+}
+\end{equation}
+
+Il fine-tuning può quindi essere interpretato come un adattamento di un
+LLM già pre-addestrato: il modello possiede già una conoscenza
+linguistica generale grazie al pre-training e, attraverso il dataset
+$\mathcal{D}_{tune}$, viene ottimizzato affinché impari a produrre le
+risposte desiderate in corrispondenza delle istruzioni ricevute.
+
+
+\section*{Dettagli Implementativi Algoritmici: Forward Pass e Backward Pass}
+Nello sviluppo pratico dell'algoritmo di retropropagazione dell'errore (back-propagation) per l'Equazione (2.18):
+
+\begin{itemize}
+    \item \textbf{Passaggio In Avanti (Forward Pass):} La sequenza concatenata $[x_{sample}, y_{sample}]$ viene costruita ed elaborata dal modello come di consueto per generare le rappresentazioni e le predizioni.
+    \item \textbf{Passaggio All'Indietro (Backward Pass):} I gradienti dell'errore (error gradients) vengono calcolati e retropropagati solo ed esclusivamente attraverso le parti della rete corrispondenti ai token di $y_{sample}$. I gradienti relativi alla sezione di contesto/input $x_{sample}$ vengono forzati a zero, lasciando inalterata quella porzione durante l'aggiornamento.
+\end{itemize}
+
+\textbf{Esempio Didattico di Calcolo della Loss:} \\
+Si consideri la sequenza complessiva:
+\[
+\underbrace{\langle s \rangle \text{ Square this number . 2 .}}_{\text{Contesto / Input } (x_{sample})} \quad \underbrace{\text{The result is 4 .}}_{\text{Predizione / Output } (y_{sample})}
+\]
+
+\begin{itemize}
+    \item Per la porzione di contesto (\texttt{<s> Square this number . 2 .}), il valore di loss assegnato per la retropropagazione è impostato a 0.
+    \item La loss viene effettivamente calcolata e retropropagata unicamente per i token della risposta target (\texttt{The result is 4 .}).
+\end{itemize}
+
+\section*{Considerazioni Ingegneristiche e Pratiche}
+L'esecuzione dell'instruction fine-tuning richiede un notevole sforzo ingegneristico e sperimentale:
+
+\begin{itemize}
+    \item Per ottenere risultati soddisfacenti, occorre sperimentare con diverse configurazioni dei principali iperparametri, tra cui il tasso di apprendimento (learning rate), la dimensione del batch (batch size) e il numero di passi di fine-tuning (fine-tuning steps).
+    \item Questo comporta lo svolgimento di molteplici cicli di addestramento e valutazione empirica (fine-tuning runs and evaluations).
+    \item Sebbene i costi e l'impegno sperimentale siano significativamente inferiori rispetto a quelli della fase di pre-addestramento, essi costituiscono un fattore critico che non deve essere trascurato.
+\end{itemize}
+
+\section*{Panoramica sulle Altre Applicazioni del Fine-Tuning}
+L'instruction fine-tuning costituisce un esempio rappresentativo, ma le tecniche di fine-tuning giocano un ruolo essenziale e pervasivo nello sviluppo degli LLM:
+
+\begin{itemize}
+    \item \textbf{Agenti Conversazionali (Chatbots):} Fine-tuning effettuato su dati di dialogo (dialog data) per gestire conversazioni strutturate.
+    \item \textbf{Gestione di Sequenze Lunghe (Long Sequence Modeling):} Adattamento dei modelli per estendere la finestra di contesto.
+    \item \textbf{Algoritmi di Fine-Tuning Efficienti:} Sviluppo di metodologie (Parameter-Efficient Fine-Tuning, PEFT) per ridurre ulteriormente l'impatto computazionale.
+\end{itemize}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 \subsection{Ingegnerizzazione dei Prompt (Prompting LLMs)}
 Senza necessità di modificare i pesi del modello, l'interazione intelligente con un LLM passa attraverso l'ingegnerizzazione del testo di input.
