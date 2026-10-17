@@ -46,6 +46,21 @@
 
 \tableofcontents
 \newpage
+\chapter{Preambolo}
+Facciamo un richiamo sull'algoritmo della discesa del gradiente.
+\begin{itemize}
+    \item I dati di input $X$ e le etichette $y$ sono costanti note e congelate per quella specifica iterazione.
+    \item L'output della rete è $\hat{y} = f(X; W)$, dove $W$ rappresenta l'insieme dei pesi addestrabili.
+    \item Il valore della loss si riduce a:$$L = \mathcal{L}(\hat{y}, y) = \mathcal{L}(f(X; W), y) = \mathcal{L}_{X,y}(W)$$
+\end{itemize}
+Poiché $X$ e $y$ non variano durante l'iterazione, l'unica variabile indipendente dell'equazione è il vettore dei pesi $W$, questo perchè durante il forward pass di uno specifico input, consideriamo l'input e il target fissati.
+Nel backward pass si calcola il gradiente rispetto ai pesi, $\nabla_W L(W)$, che indica la direzione di massima crescita dell'errore. L'aggiornamento dei pesi ($W \leftarrow W - \eta \nabla_W L$) non è altro che un passo verso il basso lungo la superficie definita da $L(W)$.
+E quindi in quella speficica iterazione, tramite il gradiente, si fa un passo lungo $\eta$ verso la direzione di minimo della funzione, si avranno altri pesi (che nel caso 3-dimensionale) indicano i punti $(x,y)$ della funzione e si usano quei pesi per il prossimo passo.
+\begin{observation}{Non è sempre la stessa $L$ ad ogni passo}
+    Da uno step $t$ al successivo $t+1$, non stai semplicemente valutando la stessa funzione in punti diversi dello spazio dei pesi: stai letteralmente cambiando la funzione, questo perchè
+    da un passo all'altro cambiano input, e valore atteso ad ogni passo, quindi la superifice varia leggermente della funzione ad ogni passo,la superficie $L_t(W)$ ha una "geografia" leggermente diversa da $L_{t+1}(W)$: i minimi locali, le pendenze e i punti di sella si spostano leggermente a ogni passo.
+\end{observation}
+
 \chapter{Introduzione}
 \section{Differenza Fra Artificial Intelligence e Generative Artificial Intelligence}
 La prima domanda, che ci sorge in mente quando leggiamo il nome del corso è:
@@ -811,6 +826,19 @@ L'architettura completa di un generico \textit{Transformer Layer} è riassunta n
 \end{enumerate}
 \end{tcolorbox}
 
+
+\newpage
+
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.4\textwidth]{_files/_images/transformer.png}
+    \caption{Archittetura di un layer di un Transformer}
+    \label{fig:GPT}
+\end{figure}
+
+
+
 Un'architettura Transformer completa consiste nello stacking sequenziale di $L$ livelli identici di questo tipo. Ciascun livello possiede le proprie matrici di peso e bias apprendibili indipendenti (non vi è condivisione di parametri tra livelli differenti).
 
 
@@ -1566,9 +1594,32 @@ P(x_2\mid x_0,x_1)
 \textbf{Nota: Il token $x_0$ non viene prodotto perchè come abbiamo visto nella sezione precedente, da tutta la sua probabilità a quello di inizio, quindi supponiamo sia sempre il token iniziale $x_0$}
 
 
-Quindi questa archittetura, è quella tipicamente usata per costruire Generative Language Model, se sono sufficientemente grandi allora vengono chiamati LLMs generativi.
+Questa architettura \textbf{Decoder-Only Transformer} è tipicamente utilizzata per costruire modelli linguistici generativi (Generative Language Models). Quando questi modelli sono caratterizzati da un numero sufficientemente elevato di parametri e da capacità linguistiche generali, vengono comunemente definiti Large Language Models (LLMs).
 
 
+La matrice di quindi che caccia questo modello è di questo genere, una matrice $\mathbb{R}^{N \times \left\lvert V \right\rvert}$
+
+\[
+\begin{pmatrix}
+    P(.|x_0) \\
+    P(. | x_0 x_1) \\
+    \dots \\
+    P(. | x_0 x_1 \dots x_{N-1})
+\end{pmatrix}
+\]
+L'ultima riga, quindi da una distribuzione di probabilità sul prossimo token, perchè prende in input $\{x_0,x_1,\dots,x_{N-1}\}$
+La riga $i$, avrà come contesto la storia fino ad $i$.
+
+Quindi ricapitolando:
+
+Un LLM generativo può utilizzare un'architettura Decoder-only Transformer.
+Possiamo rappresentare la relazione gerarchica in questo modo:
+\begin{itemize}
+    \item \textbf{Language Model (LM)} : un modello che assegna probabilità alle sequenze di token;
+    \item \textbf{Generative Language Model} : un modello utilizzato per generare sequenze di token, ad esempio predicendo autoregressivamente il token successivo;
+    \item \textbf{Large Language Model (LLM)} : un Language Model di grandi dimensioni, addestrato su grandi quantità di dati;
+    \item \textbf{Decoder-only Transformer} : un'architettura comunemente utilizzata per realizzare LLM generativi.
+\end{itemize}
 
 \subsection{Addestramento degli LLM (Training LLMs)}
 
@@ -2683,4 +2734,184 @@ Un metodo in cui si scompone un problema complesso (come calcoli matematici, rag
 Nella modalità \textbf{Few-shot CoT}, invece di fornire solo la coppia problema-soluzione, i DEMO conterranno il problema unito all'esatta procedura razionale step-by-step risolutiva. L'LLM, conformandosi al pattern espositivo, produrrà deduzioni intermedie e ridurrà drasticamente gli errori finali di inferenza.
 
 Nella modalità \textbf{Zero-shot CoT}, sfruttando una scoperta empirica ormai radicata nella comunità scientifica, si accoda dinamicamente un innesco linguistico fisso al prompt (una frase "trigger" del tipo: \textit{"Let's think step by step."}). Questa singola aggiunta altera la probabilità della distribuzione autoregressiva del modello a tal punto da obbligarlo a spacchettare il problema in ragionamenti indipendenti, permettendogli di giungere ad esiti logicamente corretti senza aver ricevuto nessun esempio formale precedente.
+\section{Training at Scale (Addestramento su Larga Scala)}
+Come primo passo nello sviluppo dei Large Language Models (LLM), è necessario addestrare questi modelli su grandi quantità di dati. Il compito di addestramento è standard: l'obiettivo è massimizzare la log-verosimiglianza (log-likelihood), il che può essere ottenuto tramite la discesa del gradiente (gradient descent). Tuttavia, quando si aumenta la scala sia della dimensione del modello sia della quantità di dati, il problema di ottimizzazione diventa altamente sfidante. Ad esempio, i modelli di grandi dimensioni rendono generalmente il processo di addestramento instabile. In questa sezione, discuteremo diverse problematiche inerenti all'addestramento su larga scala per gli LLM, tra cui la preparazione dei dati, le modifiche al modello e l'addestramento distribuito.
+
+\subsection{Data Preparation (Preparazione dei Dati)}
+L'importanza dei dati non può essere sopravvalutata nel campo del Natural Language Processing (NLP). Con lo sviluppo di reti neurali sempre più grandi, la richiesta di dati continua ad aumentare. Ad esempio, lo sviluppo di LLM può richiedere trilioni di token per il pre-training, ordini di grandezza superiori rispetto a quelli utilizzati per addestrare i modelli NLP convenzionali. In generale, si desidera raccogliere la maggior quantità possibile di dati di addestramento. Tuttavia, dataset più grandi non si traducono automaticamente in risultati migliori, e lo sviluppo degli LLM solleva nuovi problemi nella creazione o raccolta di questi dataset.
+
+\begin{observation}{Osservazione sulla grandezza del dataset}
+Nonostante il desiderio di raccogliere enormi quantità di dati, dataset di addestramento più grandi non garantiscono risultati di addestramento migliori senza un'attenta gestione delle problematiche sottostanti.
+\end{observation}
+
+Un primo problema è la \textbf{qualità dei dati}. Fornire direttamente testo grezzo proveniente da varie fonti a un modello è generalmente sconsigliato.
+\begin{definition}{Qualità dei Dati e Web Scraping}
+Una porzione significativa dei dati utilizzati per addestrare i recenti LLM proviene dal \textit{web scraping}, che spesso contiene errori e contenuti inappropriati, come linguaggio tossico (toxic language) e fatti inventati. Inoltre, Internet è sempre più inondato di contenuti generati da macchine, presentando ulteriori sfide per il filtraggio dei corpora prelevati dal web.
+\end{definition}
+
+\begin{observation}{Web Scraping}
+    Il Web Scraping è una tecnica informatica automatizzata utilizzata per estrarre dati e informazioni non strutturate dalle pagine web e convertirle in un formato strutturato e riutilizzabile (come file CSV, JSON o database).
+\end{observation}
+
+Migliorare la qualità dei dati richiede tipicamente l'integrazione di passaggi rigorosi di filtraggio e pulizia nel flusso di elaborazione dei dati. Ad esempio, adottando tecniche di elaborazione euristiche, il 90 dei dati estratti dal web può essere scartato prima dell'addestramento dell'LLM. Oltre al testo estratto dal web, i dati di addestramento degli LLM includono spesso libri, articoli accademici, contenuti generati dagli utenti sui social media e altri corpora diversificati. L'utilizzo di dataset combinati si è rivelato fondamentale per le elevate prestazioni dei modelli risultanti.
+
+Un secondo problema è la \textbf{diversità dei dati}. Si desidera che i dati di addestramento coprano il maggior numero possibile di tipologie di dati, affinché i modelli addestrati possano adattarsi facilmente a diversi compiti a valle (downstream tasks). È ampiamente riconosciuto che la qualità e la diversità dei dati di addestramento giocano un ruolo estremamente importante per gli LLM.
+\textbf{Esempio esplicativo:} L'inclusione di codice di programmazione nei dati di addestramento si è rivelata vantaggiosa per gli LLM. Questi benefici si dimostrano non solo nel potenziamento delle capacità di programmazione del modello, ma si estendono anche al miglioramento del ragionamento per problemi complessi, specialmente quelli che richiedono il \textit{chain-of-thought} (CoT) prompting.
+
+Il concetto di diversità si applica anche alla \textit{diversità linguistica}. Molti LLM sono addestrati su dati multilingue, permettendo di gestire più lingue con un singolo modello. Sebbene questo approccio mostri forti capacità in compiti multilingue e cross-lingua, le prestazioni su lingue specifiche dipendono fortemente dal volume e dalla qualità dei dati disponibili per tali lingue. In alcuni casi, questo porta a risultati scarsi per le lingue a basse risorse (low-resource languages).
+
+Un terzo problema è il \textbf{bias (pregiudizio) nei dati di addestramento}. Questo problema non è unico per gli LLM ma esiste in molti sistemi NLP.
+\begin{definition}{Bias nei Dati di Addestramento}
+Il bias dei dati si riferisce alla presenza di preferenze ingiustificate o stereotipi all'interno dei corpora di addestramento. Un esempio comune è il bias di genere, in cui il termine "infermiera" (nurse) viene associato sproporzionatamente alle donne all'interno dei testi storici.
+\end{definition}
+Per mitigare (debias) questo problema, una pratica comune è bilanciare la rappresentazione di diverse categorie demografiche, come genere, etnia e dialetti. Il bias nei dati è intrinsecamente legato al problema della diversità discusso in precedenza. Poiché molti LLM sono addestrati e allineati su dati incentrati sull'inglese (English-centric data), tendono intrinsecamente a propendere verso i valori culturali e le prospettive prevalenti tra le popolazioni anglofone. Aumentare la diversità linguistica e culturale nei dati di addestramento può mitigare parzialmente questi bias.
+
+Un altro problema nella raccolta di dati su larga scala è la \textbf{privacy}. L'addestramento di LLM su fonti estensive comporta rischi legati all'esposizione di informazioni sensibili, come proprietà intellettuale e dati personali.
+\textbf{Esempio esplicativo:} La capacità degli LLM di rappresentare pattern dai dati su cui sono addestrati potrebbe inavvertitamente portare alla memorizzazione e riproduzione di dettagli specifici e sensibili.
+Un approccio semplice alla protezione della privacy consiste nel rimuovere o anonimizzare le informazioni sensibili. Tecniche di anonimizzazione possono essere applicate per rimuovere le informazioni di identificazione personale dai dati di addestramento per impedire agli LLM di apprenderle. Tuttavia, nella pratica, cancellare o oscurare tutti i dati sensibili è difficile. Pertanto, molti LLM operano insieme a sistemi in grado di rilevare la potenziale esposizione di dati sensibili, o vengono affinati per rifiutare certe richieste che potrebbero portare a fughe di informazioni.
+
+\subsection{Model Modifications (Modifiche al Modello)}
+L'addestramento degli LLM è sfidante. Un problema comunemente incontrato è che il processo di ottimizzazione diventa sempre più instabile man mano che i modelli aumentano di dimensioni. Ad esempio, è necessario scegliere un tasso di apprendimento (learning rate) piccolo per ottenere un addestramento stabile con la discesa del gradiente, ma ciò aumenta drasticamente i tempi di addestramento. A volte, anche quando le configurazioni di addestramento sono accuratamente progettate, il processo può divergere in certi punti dell'ottimizzazione. In questa sezione, ci concentriamo sulle modifiche comuni e sui miglioramenti all'architettura standard del Transformer, che sono importanti per un addestramento stabile degli LLM.
+
+\subsubsection{Layer Normalization with Residual Connections (Normalizzazione dei Layer con Connessioni Residue)}
+La normalizzazione dei layer (layer normalization) viene utilizzata per stabilizzare l'addestramento delle reti neurali profonde. Consiste in un processo che sottrae la media e divide per la deviazione standard. Normalizzando l'output del layer in questo modo, si può efficacemente mitigare il \textit{covariate shift} interno e migliorare la stabilità dell'addestramento.
+
+Nei Transformer, la normalizzazione dei layer è tipicamente impiegata insieme alle connessioni residue. Un sub-layer può basarsi su due architetture:
+\begin{itemize}
+\item \textbf{Post-norm}: La normalizzazione dei layer viene eseguita subito dopo un blocco residuo.
+\item \textbf{Pre-norm}: La normalizzazione dei layer viene eseguita all'interno di un blocco residuo, prima della trasformazione. Questo si esprime come:
+
+
+$$output = F(LNorm(input)) + input$$
+
+
+\end{itemize}
+L'architettura \textit{pre-norm} si è dimostrata particolarmente utile per l'addestramento di Transformer profondi, e pertanto la maggior parte degli LLM si basa su questa architettura.
+
+Una forma ampiamente utilizzata per la funzione di layer normalization è data da:
+
+
+$$LNorm(h) = \alpha \odot \frac{h - \mu}{\sigma + \epsilon} + \beta$$
+
+
+dove $h$ è un vettore reale a $d$ dimensioni, $\mu$ è la media di tutte le entrate di $h$, e $\sigma$ è la corrispondente deviazione standard. Il parametro $\epsilon$ è introdotto per questioni di stabilità numerica. I parametri $\alpha \in \mathbb{R}^d$ e $\beta \in \mathbb{R}^d$ sono i termini di guadagno (gain) e bias.
+
+Una variante della layer normalization, chiamata \textbf{Root Mean Square (RMS) layer normalization}, scala solamente il vettore di input senza ricentrarlo:
+
+
+$$RMSNorm(h) = \frac{h}{\sigma_{rms} + \epsilon} \odot \alpha$$
+
+
+dove $\sigma_{rms}$ è la radice quadrata media di $h$, definita come $\sigma_{rms} = \left( \frac{1}{d} \sum_{k=1}^d h_k^2 \right)^{\frac{1}{2}}$. Questa funzione di layer normalization è utilizzata in LLM come la serie LLaMA.
+
+\subsubsection{Activation Functions in FFNs (Funzioni di Attivazione nei FFN)}
+Nei Transformer, i sub-layer Feed-Forward Network (FFN) sono progettati per introdurre non-linearità nell'apprendimento delle rappresentazioni, e si sono dimostrati utili per prevenire la degenerazione delle rappresentazioni apprese dalla self-attention. La forma standard del FFN utilizzato in questi sub-layer può essere espressa come:
+
+
+$$FFN(h) = \sigma(hW_h + b_h)W_f + b_f$$
+
+
+dove $W_h \in \mathbb{R}^{d \times d_h}$, $b_h \in \mathbb{R}^{d_h}$, $W_f \in \mathbb{R}^{d_h \times d}$, e $b_f \in \mathbb{R}^d$ sono i parametri, e $d_h$ è la dimensione nascosta (hidden size). La funzione $\sigma(\cdot)$ è la funzione di attivazione del layer nascosto. Una scelta comune per $\sigma(\cdot)$ è la Rectified Linear Unit (ReLU), data da:
+
+
+$$\sigma_{relu}(h) = \max(0, h)$$
+
+
+Nelle implementazioni pratiche, aumentare $d_h$ è vantaggioso, quindi negli LLM viene tipicamente impostato a un numero molto più grande di $d$. Tuttavia, una dimensione nascosta eccessivamente grande crea problemi sia in fase di addestramento che di rilascio. In questi casi, la scelta della funzione di attivazione gioca un ruolo più importante per FFN ampi.
+
+Diverse alternative efficaci alla ReLU sono state proposte nei moderni LLM. Una delle più utilizzate è la \textbf{Gaussian Error Linear Unit (GeLU)}, che può essere vista come un'approssimazione liscia della ReLU. Invece di applicare una soglia netta basata sul segno dell'input, la funzione GeLU pesa ogni input mediante la funzione di ripartizione di una distribuzione normale standard. Nello specifico, la funzione GeLU è definita element-wise come:
+
+
+$$\sigma_{gelu}(h) = h \odot \Phi(h)$$
+
+
+dove $\Phi(\cdot)$ indica la funzione di ripartizione della distribuzione normale standard $\mathcal{N}(0,1)$. La funzione GeLU è stata adottata in diversi LLM, come BERT, GPT-3 e BLOOM.
+
+Un'altra popolare famiglia di funzioni di attivazione è la \textbf{Gated Linear Unit (GLU)}. La forma base delle GLU è data da:
+
+
+$$\sigma_{glu}(h) = \sigma(hW_1 + b_1) \odot (hW_2 + b_2)$$
+
+
+dove $W_1, W_2 \in \mathbb{R}^{d \times d_h}$ e $b_1, b_2 \in \mathbb{R}^{d_h}$ sono parametri del modello. Il meccanismo GLU sostituisce efficacemente il singolo passaggio di proiezione lineare e attivazione in un FFN standard, mappando l'input $h$ direttamente nella dimensione nascosta espansa $d_h$. Scelte diverse per l'attivazione sottostante $\sigma(\cdot)$ producono diverse varianti della GLU.
+\begin{itemize}
+\item \textbf{GeGLU}: Se $\sigma(\cdot)$ è definita come la funzione GeLU, si ottiene:
+
+
+$$\sigma_{geglu}(h) = \sigma_{gelu}(hW_1 + b_1) \odot (hW_2 + b_2)$$
+
+
+Questa funzione è stata applicata con successo in LLM come Gemma.
+\item \textbf{SwiGLU}: Se definiamo $\sigma(\cdot)$ come la funzione Swish, $\sigma_{swish}(h) = h \cdot \text{Sigmoid}(\beta h)$, arriviamo alla funzione SwiGLU:
+
+
+$$\sigma_{swiglu}(h) = \sigma_{swish}(hW_1 + b_1) \odot (hW_2 + b_2)$$
+
+
+Sia la serie di modelli PaLM che LLaMA si affidano alla funzione SwiGLU per i loro layer FFN.
+\end{itemize}
+
+\subsubsection{Removing Bias Terms (Rimozione dei Termini di Bias)}
+Un altro popolare design del modello consiste nel rimuovere i termini di bias dalle trasformazioni affini utilizzate negli LLM. Questa semplificazione può essere applicata alla layer normalization, alle proiezioni di input per l'attenzione QKV e ai sub-layer FFN. Ad esempio, possiamo modificare l'equazione per ottenere un FFN senza termini di bias:
+
+
+$$FFN(h) = (hW_h)W_f$$
+
+
+La rimozione dei termini di bias aiuta a migliorare la stabilità dell'addestramento degli LLM. Questo metodo è stato utilizzato in diversi LLM, come LLaMA e Gemma.
+
+\subsubsection{Other Issues (Altre Problematiche)}
+Molti LLM includono anche modifiche ai loro modelli di embedding posizionale. Ad esempio, si possono sostituire le codifiche posizionali sinusoidali con i \textit{rotary position embeddings}. La stabilità dell'addestramento può essere migliorata in molti modi diversi. Ad esempio, aumentare la dimensione del batch (batch size) man mano che procede l'addestramento si è dimostrato utile per alcuni LLM. In generale, ottenere un addestramento stabile ed efficiente su larga scala richiede configurazioni attentamente progettate, come la programmazione del learning rate, la scelta dell'ottimizzatore, le strategie di addestramento parallelo e i metodi di \textit{mixed-precision training}.
+
+\subsection{Distributed Training (Addestramento Distribuito)}
+L'addestramento degli LLM richiede risorse computazionali significative. Un approccio comune per migliorare l'efficienza è l'uso di sistemi distribuiti su larga scala. Tuttavia, scalare l'addestramento degli LLM è ancora una sfida, e richiede sforzi notevoli per sviluppare sistemi hardware e software per un addestramento distribuito stabile ed efficiente.
+Una considerazione importante nell'addestramento distribuito è il parallelismo. Esistono diverse forme di parallelismo: parallelismo dei dati, parallelismo del modello, parallelismo dei tensori e parallelismo di pipeline. Nonostante i diversi modi per distribuire i calcoli tra i dispositivi, questi metodi di parallelismo si basano su un'idea simile: il problema dell'addestramento può essere diviso in compiti più piccoli che possono essere eseguiti simultaneamente:
+
+\begin{definition}{Data Parallelism (Parallelismo dei Dati)}
+È uno dei metodi di parallelismo più ampiamente utilizzati per l'addestramento delle reti neurali. Per illustrarlo, consideriamo il caso più semplice in cui viene utilizzata la regola delta standard nella discesa del gradiente:
+
+
+$$\theta_{t+1} = \theta_t - \eta \frac{\partial \mathcal{L}_{\theta_t}(\mathcal{D}_{mini})}{\partial \theta_t}$$
+
+
+dove i nuovi parametri $\theta_{t+1}$ si ottengono aggiornando gli ultimi parametri $\theta_t$ con un piccolo step $\eta$ nella direzione del gradiente di perdita negativo calcolato sul minibatch $\mathcal{D}_{mini}$. Nel parallelismo dei dati, si divide $\mathcal{D}_{mini}$ in $N$ batch più piccoli, $\{ \mathcal{D}^1, \dots, \mathcal{D}^N \}$, e li si distribuisce a $N$ worker. Il gradiente dell'intero minibatch è ottenuto aggregando i gradienti calcolati dai worker:
+
+
+$$\frac{\partial \mathcal{L}_{\theta_t}(\mathcal{D}_{mini})}{\partial \theta_t} = \underbrace{\frac{\partial \mathcal{L}_{\theta_t}(\mathcal{D}^1)}{\partial \theta_t}}_{\text{worker } 1} + \underbrace{\frac{\partial \mathcal{L}_{\theta_t}(\mathcal{D}^2)}{\partial \theta_t}}_{\text{worker } 2} + \dots + \underbrace{\frac{\partial \mathcal{L}_{\theta_t}(\mathcal{D}^N)}{\partial \theta_t}}_{\text{worker } N}$$
+
+
+In condizioni ideali, si può ottenere un'accelerazione dell'addestramento di quasi un fattore $N$.
+\end{definition}
+
+\begin{definition}{Model Parallelism (Parallelismo del Modello)}
+Man mano che gli LLM diventano più grandi, a volte diventa irrealizzabile caricare ed eseguire un LLM su un singolo dispositivo. In questo caso, possiamo disaccoppiare l'LLM in componenti più piccoli ed eseguirli su dispositivi differenti. Nel \textit{naive model parallelism}, si raggruppano i layer consecutivi nello stack e ogni gruppo viene assegnato a un worker. I worker operano sequenzialmente seguendo l'ordine dei layer; nel passaggio in avanti (forward pass) si processa l'input dai layer inferiori ai superiori, e nel passaggio all'indietro (backward pass) si propagano i gradienti di errore dai layer superiori agli inferiori. Questo metodo costringe i worker a funzionare in sequenza, per cui un worker deve attendere che il precedente termini il proprio lavoro, lasciando i dispositivi inattivi per la maggior parte del tempo.
+\end{definition}
+
+\begin{definition}{Tensor Parallelism (Parallelismo dei Tensori)}
+Il parallelismo può anche essere eseguito in un singolo passaggio computazionale. Un approccio comune è dividere una grande matrice di parametri in sotto-blocchi (chunks), moltiplicare il tensore di input con ogni chunk separatamente, e poi concatenare i risultati. Ad esempio, considerando la moltiplicazione della rappresentazione $h \in \mathbb{R}^d$ con la matrice $W_h \in \mathbb{R}^{d \times d_h}$ in un FFN, possiamo affettare la matrice $W_h$ verticalmente in $M$ sottomatrici:
+
+
+$$W_h = [W_h^1 \quad W_h^2 \quad \dots \quad W_h^M]$$
+
+
+La moltiplicazione diventa:
+
+
+$$hW_h = h [W_h^1 \quad W_h^2 \quad \dots \quad W_h^M] = [hW_h^1 \quad hW_h^2 \quad \dots \quad hW_h^M]$$
+
+
+Possiamo eseguire le moltiplicazioni di matrici su $M$ dispositivi separatamente, distribuendo così una grande moltiplicazione di matrici su più dispositivi, ognuno dei quali può avere una memoria relativamente piccola.
+\end{definition}
+
+\begin{definition}{Pipeline Parallelism (Parallelismo di Pipeline)}
+Per risolvere l'inefficienza del parallelismo del modello, il parallelismo di pipeline introduce sovrapposizioni tra le computazioni su dispositivi diversi. Un batch di campioni viene diviso in un numero di micro-batch. Non appena un worker elabora un micro-batch e lo passa al successivo, il micro-batch seguente prende immediatamente il suo posto sullo stesso worker. Idealmente, si vorrebbe massimizzare il numero di micro-batch, riducendo al minimo il tempo di inattività dei worker. Tuttavia, l'uso di micro-batch piccoli spesso riduce l'utilizzo della GPU e aumenta i costi di cambio contesto (task-switching).
+\end{definition}
+
+\begin{observation}
+L'obiettivo finale dell'elaborazione parallela è ottenere una crescita lineare dell'efficienza, ma l'addestramento distribuito è complicato dai costi di comunicazione. I risparmi di tempo dovuti al parallelismo possono essere annullati dall'overhead di comunicazione di una rete estesa. Inoltre, la sincronizzazione dei nodi introduce costi aggiuntivi poiché alcuni nodi potrebbero impiegare più tempo per completare i propri compiti. Sebbene l'addestramento asincrono possa gestire l'eterogeneità computazionale, può portare a gradienti obsoleti (stale gradients) e a una convergenza non garantita. All'aumentare dei nodi, vi è anche una maggiore probabilità di incontrare nodi guasti, richiedendo che l'intero sistema sia tollerante ai guasti (fault-tolerant).
+\end{observation}
+
+Per migliorare l'efficienza dell'addestramento, i ricercatori impiegano anche metodi di compressione e velocizzazione, come il \textbf{mixed precision training}. In questo approccio, dati a bassa precisione (come FP16 e FP8) vengono utilizzati per il calcolo dei gradienti su ogni nodo, mentre dati a precisione superiore (es. FP32/FP64) vengono utilizzati per l'aggiornamento del modello.
+\textbf{Esempio esplicativo:} Un'operazione chiave in questo approccio è l'accumulo dei gradienti, che richiede la sincronizzazione tra i nodi. A causa della non-associatività dell'addizione in virgola mobile, ciò può portare a leggere differenze numeriche nei gradienti accumulati, che possono influenzare la convergenza e le prestazioni finali. Questo problema è accentuato dal fatto che i calcoli a bassa precisione possono incontrare problemi di overflow e underflow, richiedendo che la progettazione di sistemi distribuiti tenga conto di queste questioni numeriche.
+
 \end{document}
