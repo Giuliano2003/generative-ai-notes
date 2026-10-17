@@ -8,8 +8,49 @@ Facciamo un richiamo sull'algoritmo della discesa del gradiente.
 Poiché $X$ e $y$ non variano durante l'iterazione, l'unica variabile indipendente dell'equazione è il vettore dei pesi $W$, questo perchè durante il forward pass di uno specifico input, consideriamo l'input e il target fissati.
 Nel backward pass si calcola il gradiente rispetto ai pesi, $\nabla_W L(W)$, che indica la direzione di massima crescita dell'errore. L'aggiornamento dei pesi ($W \leftarrow W - \eta \nabla_W L$) non è altro che un passo verso il basso lungo la superficie definita da $L(W)$.
 E quindi in quella speficica iterazione, tramite il gradiente, si fa un passo lungo $\eta$ verso la direzione di minimo della funzione, si avranno altri pesi (che nel caso 3-dimensionale) indicano i punti $(x,y)$ della funzione e si usano quei pesi per il prossimo passo.
-\begin{observation}{Non è sempre la stessa $L$ ad ogni passo}
-    Da uno step $t$ al successivo $t+1$, non stai semplicemente valutando la stessa funzione in punti diversi dello spazio dei pesi: stai letteralmente cambiando la funzione, questo perchè
-    da un passo all'altro cambiano input, e valore atteso ad ogni passo, quindi la superifice varia leggermente della funzione ad ogni passo,la superficie $L_t(W)$ ha una "geografia" leggermente diversa da $L_{t+1}(W)$: i minimi locali, le pendenze e i punti di sella si spostano leggermente a ogni passo.
-\end{observation}
+
+
+Consideriamo un modello semplicissimo con un unico peso $w$ e senza bias:
+$$f(x; w) = w \cdot x$$
+
+Utilizziamo la loss dell'errore quadratico per un singolo dato: $\mathcal{L}(\hat{y}, y) = (w \cdot x - y)^2$.
+Supponiamo di avere un mini-dataset composto da soli due campioni:
+
+\begin{enumerate}
+    \item Campione 1: $x_1 = 2, \quad y_1 = 4$
+    \item Campione 2: $x_2 = 3, \quad y_2 = 9$
+\end{enumerate}
+
+\paragraph{Step 1 : (Primo Batch: si usa solo il Campione 1)}
+In questo passo, i valori $x_1 = 2$ e $y_1 = 4$ sono costanti congelate. L'unica variabile è $w$
+
+Sostituendo i dati nell'equazione:
+$$L_1(w) = (2w - 4)^2 = 4w^2 - 16w + 16$$
+\begin{enumerate}
+    \item La funzione $L_1(w)$ è una parabola con il minimo in $w = 2$.
+    \item Il gradiente rispetto a $w$ è: $\nabla_w L_1(w) = 8w - 16$.
+\end{enumerate}
+
+\paragraph{Step 2 (Secondo Batch: si usa solo il Campione 2)}
+Al passo successivo, il dataloader carica il secondo campione ($x_2 = 3, y_2 = 9$). Sostituendo le nuove costanti:
+$$L_2(w) = (3w - 9)^2 = 9w^2 - 54w + 81$$
+\begin{enumerate}
+    \item La funzione $L_2(w)$ è un'equazione completamente diversa, con il minimo in $w = 3$.
+    \item Il gradiente rispetto a $w$ è: $\nabla_w L_2(w) = 18w - 54$.
+\end{enumerate}
+
+\paragraph{Step 3 Confronto con la Loss sull'intero dataset (Full-Batch)}
+Se calcolassimo la loss media sull'intero dataset, avremmo un'unica funzione statica $L_{\text{dataset}}(w)$:
+$$L_{\text{dataset}}(w) = \frac{L_1(w) + L_2(w)}{2} = \frac{(4w^2 - 16w + 16) + (9w^2 - 54w + 81)}{2} = 6.5w^2 - 35w + 48.5$$
+Il minimo "vero" dell'intero dataset si trova risolvendo $13w - 35 = 0 \implies w^* \approx 2.69$.
+
+Cosa succede all'atto pratico durante l'addestramento?
+Se al punto di partenza il peso è $w = 2.0$:
+\begin{enumerate}
+    \item Al passo 1 (usando $L_1$): Il gradiente è $\nabla_w L_1(2.0) = 8(2) - 16 = 0$. Il primo batch dice al modello: "il peso $w=2$ è perfetto, non muoverti!".
+    \item Al passo 2 (usando $L_2$): Il gradiente calcolato sullo stesso valore $w = 2.0$ diventa $\nabla_w L_2(2.0) = 18(2) - 54 = -18$. Il secondo batch spinge forte il peso verso l'alto.
+    \item La media dei due gradienti: $\frac{0 + (-18)}{2} = -9$, che equivale esattamente al gradiente calcolato direttamente sull'intero dataset $\nabla_w L_{\text{dataset}}(2.0) = 13(2) - 35 = -9$.
+\end{enumerate}
+Ecco perchè l'online learning è piu "rumoroso" e può oscillare quando deve trovare un minimo.
+
 
