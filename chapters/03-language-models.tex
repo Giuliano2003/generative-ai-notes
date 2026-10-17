@@ -1,0 +1,308 @@
+\chapter{Language Models}
+In questo capitolo ci dedicheremo ai \textbf{Language Models}.
+I \textbf{Language Models} un'applicazione della \textbf{Generative AI} nel dominio del testo, quindi \textbf{modelli} specializzati nella creazione di testi.
+\section{Cos'è un Language Models ?}
+La classica definizione di un \textbf{Language Models}, è una \textbf{distribuzione di probabilità su una sequenza di tokens di una lunghezza $L$ fissata}.
+Supponi noi abbiamo un vocabolario $\mathcal{V}$, di un insieme di token.
+A \textbf{language model} $p$ assegna a \textbf{ciascuna} delle sequenze di token del vocabolario $x_1,\dots,x_L \in \mathcal{V}^L$ una probabilità (un numero fra 0 e 1)
+\begin{equation}
+    p(x_1,\dots,x_L)
+\end{equation} 
+La probabilità ci dice, intuitivamente, quanto è "buona" una sequenza di token.
+Per esempio se il vocabolario è $\mathcal{V}$ = \{ate,ball,cheese,mouse,the\}, il language model assegna:
+\begin{itemize}
+    \item $p(the,mouse,ate,the,cheese)=0.02$
+    \item $p(the,cheese,ate,the,mouse)=0.01$
+    \item $p(mouse,the,the,cheese,ate)=0.0001.$
+    \item \dots
+\end{itemize}
+In questo caso L = |$\mathcal{V}$|, ed essendo una distribuzione di probabilità:
+\begin{equation}
+    \sum_{x_1,\dots,x_L}p(x_1,\dots,x_L) = 1
+\end{equation}
+\begin{warning}{Accort alla lunghezza fissata}
+In questo modello matematico, stiamo considerando che la distribuzione è su una lunghezza fissata, ad esempio se ho $L$ = 3, e considero
+tutte le possibili combinazioni di token, la loro probabilità congiunta dovrà sommare ad 1.
+Cambiando in $L$ = 4, vale lo stesso discorso.
+\end{warning}
+
+
+\textbf{Matematicamente quindi è un oggetto semplice e bello}, ma la semplicità è \textbf{ingannevole} : l'abilità di assegnare probabilità (meaningful) a tutte le sequenze
+richiede straordinaria (ma implicita) conoscenze linguistiche e word knowledge.
+
+
+Per esempio, il modello linguistico dovrebbe assegnare a «mouse the the cheese ate» una probabilità molto bassa in modo implicito
+perché è grammaticalmente scorretto (conoscenza sintattica). Il modello linguistico dovrebbe assegnare a «the mouse ate the cheese» 
+una probabilità più alta rispetto a «the cheese ate the mouse» in modo implicito a causa della conoscenza del mondo: entrambe le frasi 
+sono identiche dal punto di vista sintattico, ma differiscono per plausibilità semantica.
+\paragraph{Generation}: Come abbiamo definito, un language model $p$, prende una sequenza e ritorna una probabilità per valutarne la bontà.
+Noi possiamo anche generare una sequenza dato un language model $p$.
+Il modo piu teorico possibile di fare questo è andare a campionare una sequenza $x_{1:L}$ dal language model $p$, che ha probabilità $p(x_{1:L})$ (dato che ha una distribuzione di probabilità in questo modello teorico matematico posso farlo), questo si denota cosi:
+\begin{equation}
+    x_{1:L} \sim p
+\end{equation}
+Cioè l'equazione sopra significa: \textbf{estrai una sequenza di lunghezza $L$ secondo la distribuzione $p$}.
+Nel modo "più puro" (teorico), ogni frase ha una probabilità di essere generata esattamente pari al suo valore $p(x_{1:L})$.
+\paragraph{Perchè questa cosa è infattibile}:
+Per \textbf{efficienza computazionale} \textbf{calcolare} (si perchè bisogna calcolare tutte le sequenze ovviamente) e campionare direttamente su tutte le possibili sequenze di lunghezza $L$, sarebbe
+computazionalmente insostenibile, (il numero di combinazioni cresce esponenzialmente con la lunghezza $L$). Nella pratica si genera 
+token per token (in modo autoregressivo).
+\newpage
+\section{Autoregressive language models}
+Nei modelli auto-regressivi, la chain rule, ci aiuta questo perchè come abbiamo detto, il nostro problema di prima è computazionalmente intrattabile,
+questo perchè se io volessi calcolare la distribuzione di probabilità congiunta $p(x_{1:L})$ senza usare la chain rule, sarei vincolato dall'assioma fondamentale della probabilità, ovvero che la somma di tutte le probabilità su tutti gli eventi possibili dello spazio campionario deve valere $1$:
+cioè:
+\begin{equation}
+    \sum_{x_{1:L} \in V^L} p(x_{1:L}) = 1
+\end{equation}
+Quindi dovrei computare per ogni possibile sequenza del vocabolario fissata una lunghezza la probabilità ed è \textbf{intrattabile}.
+
+La chain rule ci facilità il lavoro perchè io posso trovare un modo per descrivere la probabilità congiunto in un altro modo.
+Un modo comune per scrivere la distribuzione congiunta $p(x_{1:L})$ di una sequenza $x_{1:L}$ consiste nell'utilizzare la \textbf{regola della catena della probabilità} (\textit{chain rule of probability}):
+
+$$
+p(x_{1:L})
+=
+p(x_1)p(x_2\mid x_1)p(x_3\mid x_1,x_2)\cdots
+p(x_L\mid x_{1:L-1})
+=
+\prod_{i=1}^{L}p(x_i\mid x_{1:i-1})
+$$
+
+dove, per $i=1$, si assume che:
+
+$$
+p(x_1\mid x_{1:0}) = p(x_1).
+$$
+
+Essendo $p(x_{1:L})$ una distribuzione di probabilità, deve valere la condizione di normalizzazione:
+
+$$
+\sum_{x_{1:L}\in\mathcal V^L}p(x_{1:L})=1.
+$$
+
+La notazione
+
+$$
+\sum_{x_{1:L}\in\mathcal V^L}
+$$
+
+equivale a considerare tutte le possibili combinazioni di $x_1,\ldots,x_L$ nel vocabolario $\mathcal V$, e può quindi essere esplicitata come una serie di sommatorie:
+
+$$
+\sum_{x_1\in\mathcal V}
+\sum_{x_2\in\mathcal V}
+\cdots
+\sum_{x_L\in\mathcal V}
+p(x_1,\ldots,x_L)
+=1.
+$$
+
+Sostituendo la regola della catena:
+
+$$
+\sum_{x_1\in\mathcal V}
+\sum_{x_2\in\mathcal V}
+\cdots
+\sum_{x_L\in\mathcal V}
+\prod_{i=1}^{L}p(x_i\mid x_{1:i-1})
+=1.
+$$
+
+\subsubsection{Dimostrazione}
+
+La proprietà fondamentale che utilizziamo è che, fissato un certo contesto $x_{1:i-1}$, la probabilità condizionata $p(x_i\mid x_{1:i-1})$ è una distribuzione di probabilità su $x_i$. Pertanto:
+
+$$
+\boxed{
+\sum_{x_i\in\mathcal V}
+p(x_i\mid x_{1:i-1})=1
+}
+$$
+
+Ad esempio, fissato $x_1$:
+
+$$
+\sum_{x_2\in\mathcal V}p(x_2\mid x_1)=1.
+$$
+
+Consideriamo, per semplicità, $L=3$:
+
+$$
+\sum_{x_1\in\mathcal V}
+\sum_{x_2\in\mathcal V}
+\sum_{x_3\in\mathcal V}
+p(x_1)p(x_2\mid x_1)p(x_3\mid x_1,x_2).
+$$
+
+Partiamo dalla sommatoria più interna:
+
+$$
+\sum_{x_3\in\mathcal V}
+p(x_1)p(x_2\mid x_1)p(x_3\mid x_1,x_2).
+$$
+
+Poiché i primi due fattori non dipendono da $x_3$, possiamo portarli fuori:
+
+$$
+p(x_1)p(x_2\mid x_1)
+\sum_{x_3\in\mathcal V}
+p(x_3\mid x_1,x_2).
+$$
+
+Per la proprietà della distribuzione condizionata:
+
+$$
+\sum_{x_3\in\mathcal V}
+p(x_3\mid x_1,x_2)=1.
+$$
+
+Quindi rimane:
+
+$$
+p(x_1)p(x_2\mid x_1).
+$$
+
+Ripetendo lo stesso ragionamento per $x_2$:
+
+$$
+\sum_{x_2\in\mathcal V}
+p(x_1)p(x_2\mid x_1)
+=
+p(x_1)
+\sum_{x_2\in\mathcal V}p(x_2\mid x_1)
+=
+p(x_1).
+$$
+
+Infine:
+
+$$
+\sum_{x_1\in\mathcal V}p(x_1)=1.
+$$
+
+Pertanto:
+
+$$
+\boxed{
+\sum_{x_{1:L}\in\mathcal V^L}
+\prod_{i=1}^{L}p(x_i\mid x_{1:i-1})
+=1
+}
+$$
+
+La distribuzione congiunta costruita tramite la \textbf{regola della catena} è quindi correttamente normalizzata.
+
+
+Passo da dover gestire uno spazio di dimensione $\vert{}V\vert{}^L$ (esponenziale) a dover fare solo $L$ passaggi, ciascuno su uno spazio di dimensione $\vert{}V\vert{}$ (lineare),
+\textbf{perchè ad ogni passo, dovrò calcolarmi la distribuzione su tutti i token del vocabolario (dato i token precedenti) ed assegnare ad ogni token del vocabolario una probabilità, questo viene fatto per tutti i token della sequenza.}
+
+Supponendo ad esempio il vocabolario di 3 token si ha dato $x_1$ = "gatto":
+\begin{itemize}
+    \item $p("mangia" | "gatto") = 0.8$
+    \item $p("topo" | "gatto") = 0.15$
+    \item $p("gatto" | "gatto") = 0.05$
+\end{itemize}
+
+e indichiamo in modo formale, ma con un piccolo abuso di notazione (perchè p indica la probabilità di un token specifico) il campionamento di $x_i$ dalla distribuzione di probabilità condizionata è:
+\begin{equation}
+    x_i \sim p(x_i \mid x_{1:i-1})
+\end{equation}
+
+\newpage
+Un \textbf{modello di linguaggio autoregressivo} è un modello in cui ciascuna distribuzione condizionata $p(x_i \mid x_{1:i-1})$ può essere calcolata in modo efficiente (ad esempio, utilizzando una rete neurale feedforward).
+
+Un'altra cosa interessante da dire è come vengono calcolate queste probabilità:
+\begin{equation}
+    P(A | B) = \frac{P(A \cap B)}{P(B)}
+\end{equation}
+Questa è la legge della probabilità condizionata.
+Una volta detto questo, a questi modelli di testo, servono dei grandi \textbf{corpus di dati di addrestamento}, cioè dati nella forma:
+\begin{quote}
+Il gatto mangia la mela. \\
+Il bambino mangia la mela. \\
+Il gatto mangia la carne. \\
+Il cane mangia la mela. \\
+\end{quote}
+Questi dati servono al modello a calcolare (stimare) queste probabilità condizionate.
+
+Perchè supponiamo che:
+\begin{itemize}
+    \item Evento B :  appare il contesto $\text{"mangia, la"}$
+    \item Evento A :  la parola successiva è $\text{"mela"}$
+    \item Evento $A \cap B$: appare la sequenza completa $\text{"mangia, la, mela"}$
+\end{itemize}
+Nel corpus, la probabilità di osservare una determinata sequenza è stimata dividendo il suo conteggio per il numero totale $N$ di token nel testo:
+\begin{itemize}
+    \item $P(\text{mangia, la, mela}) = \frac{\text{count}(\text{mangia, la, mela})}{N}$
+    \item $P(\text{mangia, la}) = \frac{\text{count}(\text{mangia, la})}{N}$
+\end{itemize}
+Applicando la formula della probabilità condizionata, il totale del corpus $N$ si semplifica a numeratore e denominatore:
+\begin{equation}
+    P(\text{mela} \mid \text{mangia, la}) = \frac{\frac{\text{count}(\text{mangia, la, mela})}{N}}{\frac{\text{count}(\text{mangia, la})}{N}} = \frac{\text{count}(\text{mangia, la, mela})}{\text{count}(\text{mangia, la})}
+\end{equation}
+
+
+\subsection{N-gram models}
+
+In un \textbf{modello n-gram}, la predizione di un token $x_i$ dipende esclusivamente dagli ultimi \textbf{$n - 1$ caratteri} (o token) $x_{i-(n-1):i-1}$, anziché dall'intera storia precedente:
+\[
+p(x_i \mid x_{1:i-1}) = p(x_i \mid x_{i-(n-1):i-1})
+\]
+
+Ad esempio, un modello a \textbf{trigrammi} ($n = 3$) definisce la probabilità come:
+\[
+p(\text{cheese} \mid \text{the, mouse, ate, the}) = p(\text{cheese} \mid \text{ate, the})
+\]
+
+Queste probabilità vengono calcolate in base alla frequenza con cui i vari n-grammi (ad es. \textit{ate the mouse} e \textit{ate the cheese}) compaiono all'interno di un ampio corpus di testo, opportunamente bilanciate tramite tecniche di \textit{smoothing} (ad es. il \textit{Kneser-Ney smoothing}) per evitare l'overfitting.
+
+L'addestramento dei modelli n-gram sui dati è estremamente \textbf{economico dal punto di vista computazionale} e altamente scalabile. Di conseguenza, questi modelli sono stati addestrati su enormi quantità di testo. Per esempio, Brants et al. (2007) hanno addestrato un modello a 5-grammi su 2 mila miliardi di token per la traduzione automatica.
+A titolo di confronto, GPT-3 è stato addestrato su sole 300 miliardi di token.
+
+Tuttavia, i modelli \textbf{n-gram presentano limiti fondamentali}. Si consideri il seguente prefisso:
+\begin{quote}
+\textit{Stanford has a new course on large language models. It will be taught by \underline{\hspace{1cm}}}
+\end{quote}
+
+\begin{itemize}
+    \item Se $n$ è troppo piccolo, il modello sarà incapace di catturare dipendenze a lungo raggio e la parola successiva non potrà dipendere dal contesto iniziale (\textit{Stanford}),
+    quindi se $n$ è troppo piccolo si ha poco contesto.
+    \item Se $n$ è troppo grande, diventa \textbf{statisticamente irrealizzabile} ottenere stime accurate delle probabilità, poiché quasi tutte le sequenze lunghe ma ragionevoli appaiono $0$ volte anche nei corpors più grandi:
+    \[
+    \text{count}(\text{Stanford, has, a, new, course, on, large, language, models}) = 0
+    \]
+    Quindi il numeratore diventa 0, e tutta la condizionata diventa 0.
+    Questo problema è la \textbf{sparsità dei dati}.
+\end{itemize}
+
+Di conseguenza, i modelli linguistici basati su n-grammi sono stati storicamente limitati a compiti come il riconoscimento vocale e la traduzione automatica, dove il segnale acustico o il testo sorgente fornivano informazioni sufficienti da rendere accettabile la sola modellazione delle \textbf{dipendenze locali}.
+
+\subsection{Neural language models}
+
+Un importante passo avanti per i modelli linguistici è stato l'introduzione delle reti neurali. Bengio et al. (2003) hanno introdotto i modelli linguistici neurali, in cui la probabilità $p(x_i \mid x_{i-(n-1):i-1})$ viene modellata tramite una rete neurale:
+\[
+p(\text{cheese} \mid \text{ate, the}) = \text{some-neural-network}(\text{ate, the})
+\]
+
+La rete neurale sarà fatta in modo tale da avere tanti neuroni di output, tante quanto sono le parole del dizionario, successivamente, ogni neurone (tramite la softmax) caccierà
+una probabilità.
+Il valore restituito dal neurone associato a "cheese" corrisponderà a $P(\text{cheese} \mid \text{ate, the})$
+
+Si noti che la lunghezza del contesto è ancora limitata da $n$, ma ora è \textbf{statisticamente fattibile} stimare i modelli per valori di $n$ molto più grandi rispetto ai classici n-grammi .
+
+A questo punto, la sfida principale era rappresentata dal fatto che l'addestramento delle reti neurali risultava molto più \textbf{costoso dal punto di vista computazionale}. Gli autori addestrarono un modello su soli 14 milioni di parole, dimostrando che superava i modelli ad n-grammi addestrati sulla stessa quantità di dati. Tuttavia, poiché i modelli ad n-grammi erano maggiormente scalabili e i dati non costituivano un collo di bottiglia, questi ultimi hanno continuato a dominare per almeno un altro decennio .
+
+A partire dal 2003, si sono avuti altri due sviluppi chiave nella modellazione linguistica neurale :
+
+\begin{itemize}
+    \item \textbf{Recurrent Neural Networks (RNN):} comprese le \textit{Long Short-Term Memory} (LSTM), hanno permesso alla distribuzione condizionata di un token $x_i$ di dipendere dall'\textbf{intero contesto} $x_{1:i-1}$ (praticamente $n = \infty$), sebbene fossero difficili da addestrare.
+    
+    \item \textbf{Transformers:} un'architettura più recente (sviluppata per la traduzione automatica nel 2017) che è ritornata ad avere una lunghezza del contesto fissa $n$, ma con una maggiore \textbf{facilitià di addestramento} (sfruttando il parallelismo delle GPU). Inoltre, $n$ può essere reso ``sufficientemente grande'' per molte applicazioni (ad esempio, GPT-3 utilizza $n = 2048$) .
+\end{itemize}
+
+
+
+
+\newpage
+

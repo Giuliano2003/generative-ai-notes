@@ -1,0 +1,1699 @@
+\chapter{Generative LLMs}
+
+In questo capitolo vengono introdotti i concetti fondamentali dei modelli linguistici di grandi dimensioni (Large Language Models, LLM) generativi. È fondamentale chiarire fin dall'inizio un'importante distinzione terminologica: in senso lato, il termine LLM può includere una vasta gamma di architetture, inclusi modelli non generativi o basati puramente su encoder (come ad esempio BERT). Tuttavia, per mantenere la trattazione semplice e in linea con l'uso predominante nel panorama attuale, in questi appunti utilizzeremo l'acronimo LLM per riferirci specificamente ai modelli di natura generativa, di cui la famiglia GPT rappresenta l'esempio più celebre.
+
+Il percorso di studio inizierà con un'introduzione generale al funzionamento degli LLM, esaminando da vicino i passaggi chiave e i mattoni architetturali necessari per la costruzione di tali modelli. In seguito, l'attenzione si sposterà su due delle sfide più complesse e attuali legate all'aumento di scala (scaling) di queste reti: in primo luogo, le metodologie per addestrare modelli di queste dimensioni su moli di dati immense; in secondo luogo, le tecniche per potenziarli affinché riescano a gestire input con contesti estremamente lunghi (long-context inputs). Infine, il capitolo si chiuderà con un breve riepilogo per consolidare i concetti appresi.
+
+\section{Breve introduzione agli LLM (A Brief Introduction to LLMs)}
+
+In questa sezione, noi introduciamo i concetti basici degli LLMs, richiesti per questo capitolo e i successivi sottocapitoli,
+In ambito accademico e industriale, i termini "word" (parola) e "token" (unità di base prodotta dalla tokenizzazione) sono spesso usati come sinonimi, sebbene in elaborazione del linguaggio naturale (NLP) possiedano sfumature tecniche leggermente differenti.
+
+Prima di presentare i dettagli tecnici, vediamo prima come un \textbf{language models} lavora. La funzionalità core, del language modeling, è di \textbf{stimare la probabilità di una sequenza di token}.
+
+Sia data una sequenza di token $x = \{x_0, x_1, \dots, x_m\}$, dove $x_0$ rappresenta un simbolo speciale di inizio sequenza (spesso indicato con il simbolo \texttt{⟨s⟩} o \texttt{⟨SOS⟩}). Applicando la regola della catena della probabilità, la probabilità congiunta dell'intera sequenza può essere fattorizzata nel seguente modo:
+\begin{equation}
+Pr(x_0, \dots, x_m)
+=
+\prod_{i=0}^{m} Pr(x_i \mid x_0, \dots, x_{i-1})
+\end{equation}
+
+La notazione utilizzata nella formula precedente è una \textbf{abbreviazione}. Più rigorosamente, le variabili aleatorie sono indicate con lettere maiuscole
+$X_0, \dots, X_m$, mentre $x_0, \dots, x_m$ rappresentano i rispettivi valori (o realizzazioni).
+
+Pertanto, la notazione
+
+\begin{equation}
+Pr(x_0, \dots, x_m)
+\end{equation}
+
+è un'abbreviazione di
+
+\begin{equation}
+Pr(X_0=x_0, \dots, X_m=x_m).
+\end{equation}
+
+Analogamente, il termine
+
+\begin{equation}
+Pr(x_i \mid x_0, \dots, x_{i-1})
+\end{equation}
+
+è un'abbreviazione di
+
+\begin{equation}
+Pr(X_i=x_i \mid X_0=x_0, \dots, X_{i-1}=x_{i-1}).
+\end{equation}
+
+Quindi, la formula può essere scritta in forma completamente esplicita come
+
+\begin{equation}
+Pr(X_0=x_0, \dots, X_m=x_m)
+=
+\prod_{i=0}^{m}
+Pr(X_i=x_i \mid X_0=x_0, \dots, X_{i-1}=x_{i-1}).
+\end{equation}
+
+Per semplicità, nei testi si utilizza spesso la prima notazione, omettendo le variabili aleatorie $X_i$ e scrivendo direttamente i loro valori $x_i$.
+
+dove $Pr(x_i \vert{} x_0, \dots, x_{i-1})$ rappresenta la probabilità condizionata del token $x_i$ dato tutto il suo contesto precedente $\{x_0, \dots, x_{i-1}\}$.
+
+
+Dove assumiamo che quando $i$ = 0:
+$$
+Pr(X_0 = ⟨s⟩) = 1
+$$
+questo perchè il token di input è predefinito, \textbf{ed è sempre pari a 1}
+
+
+Per ragioni di stabilità numerica (per evitare problemi di underflow quando si moltiplicano molte probabilità piccole), nell'addestramento delle reti neurali si preferisce operare nel dominio logaritmico:
+\begin{equation}
+\log Pr(x_0, \dots, x_m) = \sum_{i=1}^m \log Pr(x_i | x_0, \dots, x_{i-1})
+\end{equation}
+\begin{observation}{Osservazione sul primo termine della sommatoria}
+La sommatoria in questa formula parte da $i=1$ anziché da $0$. Un passaggio logico implicito in questa equazione è l'assunzione che $\log Pr(x_0) = 0$, poiché la probabilità del token iniziale predefinito $x_0$ è pari a $1$ (essendo deterministicamente fornito al modello).
+\end{observation}
+
+Quando applichiamo un LLM addestrato (fase di inferenza), l'operazione fondamentale è trovare il token successivo più probabile dato il contesto. Dal punto di vista matematico, ciò si traduce in:
+\begin{equation}
+\arg\max_{x_i \in V} Pr(x_i | x_0, \dots, x_{i-1})
+\end{equation}
+dove $V$ rappresenta il vocabolario del modello, ovvero l'insieme di tutti i possibili token validi.
+Questo processo avviene in modo \textbf{autoregressivo} da sinistra verso destra: ad ogni passo il modello predice il token più probabile, lo appende al contesto esistente e ripete l'operazione per predire il token successivo.
+
+\begin{example}{Esempio di Generative Language Models (Non large)}
+Immaginiamo di voler completare la sequenza a partire dal prefisso \texttt{ a}:
+\begin{enumerate}
+\item \textbf{Contesto:} \texttt{ a} $\rightarrow$ Il modello ricerca $\arg\max_{x_2 \in V} Pr(x_2 \vert{} \texttt{<s> a})$. Il token vincente è \texttt{b}.
+\item \textbf{Contesto:} \texttt{ a b} $\rightarrow$ Il modello ricerca $\arg\max_{x_3 \in V} Pr(x_3 \vert{} \texttt{<s> a b})$. Il token vincente è \texttt{c}.
+\item \textbf{Contesto:} \texttt{ a b c} $\rightarrow$ Il modello ricerca $\arg\max_{x_4 \in V} Pr(x_4 \vert{} \texttt{<s> a b c})$. Il token vincente è \texttt{d}.
+\end{enumerate}
+In questo modo il modello ha generato progressivamente la sequenza \texttt{b c d} aggiungendo sempre le proprie predizioni al nuovo contesto.
+
+Nota che questo processo può essere implementato tramite una rete neurale o tramite un \textbf{Decoder-only Transformers}
+\end{example}
+
+\subsection{Architettura Transformer basata solo su Decoder (Decoder-only Transformers)}
+
+L'architettura Transformer di tipo "decoder-only" è ad oggi il paradigma dominante per la costruzione degli LLM generativi.
+In questo schema, l'input è una sequenza di token $\{x_0, \dots, x_{N-1}\}$ che viene convertita in una sequenza di vettori di embedding (rappresentazioni vettoriali continue) $\{e_0, \dots, e_{m-1}\}$.
+Ogni vettore $e_i \in \mathbb{R}^{d_e}$ è ottenuto dalla \textbf{somma} dell'embedding semantico (token embedding) relativo a $x_i$ e dell'embedding posizionale per la posizione $i$.
+Poi successivamente viene messa in una matrice $X \in N \times D$, dove ogni riga $n-esima$, avrà $x_n^T$, proprio come i transformer. \textbf{Dove $x_0$} è proprio il token di inizio
+
+Il nucleo del modello è costituito da una pila (stack) di blocchi Transformer. Ciascun blocco è proprio come quello di un Transformer normale:
+\begin{enumerate}
+\item Un meccanismo di self-attention (auto-attenzione).
+\item Una rete neurale feed-forward (FFN).
+\end{enumerate}
+
+Questi sotto-livelli possono essere configurati secondo due architetture principali che determinano dove avviene la normalizzazione (Layer Normalization, o LNorm):
+\begin{align}
+\text{Post-norm:} \quad & output = LNorm(F(input) + input) \\
+\text{Pre-norm:} \quad & output = F(LNorm(input)) + input
+\end{align}
+dove $F(\cdot)$ indica la funzione centrale del sotto-livello (la self-attention o l'FFN), mentre la somma garantisce la presenza di connessioni residue (residual connections), fondamentali per consentire al gradiente di fluire in reti molto profonde.
+Questo è esattamente quello che abbiamo visto nei Transformer, dove vi è il layer di normalizzazione, nella fase di Multi-Head, cioè quando faccio $Y(X)$, e poi nella fase quando applico la MLP.
+
+
+\subsubsection{Meccanismo di Attention QKV}
+
+$F(\cdot)$ può rappresentare l'algoritmo di \textit{Multi-Head Self-Attention}, che abbiamo visto nella sezione dedicata ai Transformer, oppure una rete \textit{Multi-Layer Perceptron} (MLP). In questo paragrafo consideriamo il meccanismo di \textit{Self-Attention} basato su Query, Key e Value (QKV).
+
+L'espressione generale della QKV attention è:
+
+\begin{equation}
+\operatorname{Att}_{qkv}(Q,K,V)
+=
+\operatorname{Softmax}
+\left(
+\frac{QK^\top}{\sqrt{D_k}} + \operatorname{Mask}
+\right)V
+\end{equation}
+
+dove:
+
+\begin{itemize}
+
+\item $Q,K,V \in \mathbb{R}^{N \times D}$ sono rispettivamente le matrici delle \textit{Query}, delle \textit{Key} e dei \textit{Value}, dove $N$ è il numero di token della sequenza e $D$ è la dimensione delle rappresentazioni vettoriali.
+
+\item $D_k$ è la dimensione delle rappresentazioni utilizzate per le Query e le Key. Nel nostro caso assumiamo:
+
+\begin{equation}
+D_k = D
+\end{equation}
+
+Pertanto, nel nostro caso particolare, $Q,K,V\in\mathbb{R}^{N\times D}$.
+
+La divisione per $\sqrt{D_k}$ è un fattore di \textit{scaling} che evita che i prodotti scalari tra Query e Key assumano valori troppo grandi, i quali potrebbero portare il Softmax in regioni caratterizzate da gradienti molto piccoli.
+
+\item $\operatorname{Mask}\in\mathbb{R}^{N\times N}$ è la matrice di mascheramento utilizzata per impedire al modello di utilizzare informazioni relative ai token futuri.
+
+\end{itemize}
+
+\paragraph{Maschera causale}
+
+Nel caso di un Transformer \textit{decoder-only}, il modello è autoregressivo: quando deve elaborare la posizione $i$, può utilizzare solamente le informazioni relative ai token presenti nelle posizioni precedenti o nella posizione corrente, ma non quelle relative alle posizioni successive.
+
+La matrice \textit{Mask} ha quindi l'elemento $(i,j)$ a \textbf{-$\infty$} se $j > i$, altrimenti 0, cosi gli altri elementi non vengono cambiati, questo perchè poi applicando la softmax, diventa 0.
+
+\begin{equation*}
+\text{Mask} = 
+\begin{bmatrix}
+0 & -\infty & -\infty & \dots & -\infty \\
+0 & 0 & -\infty & \dots & -\infty \\
+\vdots & \vdots & \vdots & \ddots & \vdots \\
+0 & 0 & 0 & \dots & 0
+\end{bmatrix}
+\end{equation*}
+
+Consideriamo la matrice $A$ dopo la Softmax:
+
+\begin{equation}
+\begin{bmatrix}
+a_{1,1} & 0 & \dots & 0  \\
+a_{2,1} & a_{2,2} & 0 & \dots & 0 \\
+\dots \\
+a_{N,1} & a_{N,2} & \dots & a_{N,N} \\
+\end{bmatrix}
+\end{equation}
+che contiene i pesi di attenzione. Il prodotto finale è:
+
+\begin{equation}
+Y=AV
+\end{equation}
+
+dove $Y\in\mathbb{R}^{N\times D}$ è la matrice delle nuove rappresentazioni vettoriali.
+
+La maschera fa si che $y_n^t$ della matrice $Y$, non dipenda dai token futuri, ma solo da token che vengono prima di lui, questo perchè:
+\begin{equation}
+    y_1 = a_{1,1} x_1 + a_{1,2} x_2 + \dots + a_{1,N} x_N
+\end{equation}
+Ma dato che
+\[
+a_{i,j} = 0 \text{ per j > i }
+\]
+Allora si ha che:
+\begin{equation}
+    y_1 = a_{1,1} x_1
+\end{equation}
+e quindi $y_1$, dipende solo dal token $x_1$.
+
+Anche 
+\begin{equation}
+    y_2 = a_{2,1} x_1 + a_{2,2} x_2
+\end{equation}
+e quindi $y_2$, dipende solo dai token precedenti.
+
+Questo è il meccanismo che permette di mantenere la natura autoregressiva del Transformer decoder-only: la rappresentazione associata a ciascuna posizione contiene solamente informazioni provenienti dal token corrente e dai token precedenti, e non dai token futuri.
+
+\paragraph{Multi-Head Self-Attention}
+
+La \textit{Multi-Head Self-Attention} esegue il meccanismo di QKV attention in $H$ teste (\textit{heads}) differenti, in parallelo. Ogni testa utilizza proprie matrici di proiezione e può quindi apprendere differenti modalità di relazione tra i token.
+
+La rappresentazione prodotta dalla \textit{Multi-Head Self-Attention} è:
+
+\begin{equation}
+F(H)
+=
+\operatorname{Concat}
+\left(
+\operatorname{H}_1,
+\ldots,
+\operatorname{H}_H
+\right)W^O
+\end{equation}
+
+dove $\operatorname{Concat}$ concatena lungo la dimensione delle caratteristiche le rappresentazioni prodotte dalle diverse teste e $W^O$ è una matrice di proiezione utilizzata per combinare le informazioni provenienti dalle diverse teste.
+
+Per la $h$-esima testa, con $h=1,\ldots,H$, si calcolano:
+
+\begin{equation}
+Q_h = HW_h^Q,
+\qquad
+K_h = HW_h^K,
+\qquad
+V_h = HW_h^V
+\end{equation}
+
+dove le matrici $W_h^Q$, $W_h^K$ e $W_h^V$ sono parametri addestrabili.
+
+Nel caso considerato in questo paragrafo assumiamo che ogni testa produca rappresentazioni di dimensione $D$. Pertanto:
+
+\begin{equation}
+Q_h,K_h,V_h\in\mathbb{R}^{N\times D}
+\end{equation}
+
+e:
+
+\begin{equation}
+W_h^Q,W_h^K,W_h^V\in\mathbb{R}^{D\times D}
+\end{equation}
+
+La QKV attention della $h$-esima testa è quindi:
+
+\begin{equation}
+\operatorname{H}_h
+=
+\operatorname{Att}_{qkv}
+(Q_h,K_h,V_h)
+\end{equation}
+
+ossia:
+
+\begin{equation}
+\operatorname{H}_h
+=
+\operatorname{Softmax}
+\left(
+\frac{Q_hK_h^\top}{\sqrt{D_k}}
++
+\operatorname{Mask}
+\right)V_h
+\end{equation}
+
+con:
+
+\begin{equation}
+D_k=D
+\end{equation}
+
+Poiché ciascuna delle $H$ teste produce una matrice di dimensione $N\times D$, dopo la concatenazione si ottiene:
+
+\begin{equation}
+\operatorname{Concat}
+\left(
+\operatorname{H}_1,\ldots,\operatorname{H}_H
+\right)
+\in\mathbb{R}^{N\times HD}
+\end{equation}
+
+Di conseguenza, per riportare la rappresentazione alla dimensione originale $D$, la matrice di proiezione finale deve avere dimensione:
+
+\begin{equation}
+W^O\in\mathbb{R}^{HD\times D}
+\end{equation}
+
+e quindi:
+
+\begin{equation}
+F(H)\in\mathbb{R}^{N\times D}
+\end{equation}
+
+La Multi-Head Self-Attention permette quindi di ottenere, a partire dalle rappresentazioni iniziali dei token, nuove rappresentazioni contestualizzate. La maschera causale garantisce che tali rappresentazioni rispettino il vincolo autoregressivo: la rappresentazione alla posizione $i$ può dipendere solamente dai token nelle posizioni $0,\ldots,i$.
+
+
+\subsubsection{Output del Transformer e predizione del token successivo}
+
+Al termine dello stack composto dai blocchi Transformer, otteniamo una matrice di rappresentazioni contestualizzate:
+
+\begin{equation}
+H^L \in \mathbb{R}^{N\times D}
+\end{equation}
+
+dove $N$ è il numero di token della sequenza e $D$ è la dimensione delle rappresentazioni vettoriali.
+
+La riga $i$-esima di $H^L$, indicata con $h_i^T$, contiene la rappresentazione contestualizzata del token nella posizione $i$. Grazie alla maschera causale utilizzata nei blocchi di Self-Attention, tale rappresentazione può dipendere solamente dai token presenti nelle posizioni precedenti e dalla posizione corrente.
+
+Per trasformare queste rappresentazioni in probabilità sui possibili token del vocabolario, viene applicata una proiezione lineare:
+
+\begin{equation}
+Z = H^L W^O
+\end{equation}
+
+dove:
+
+\begin{equation}
+W^O \in \mathbb{R}^{D\times |V|}
+\end{equation}
+
+è una matrice di pesi addestrabili e $|V|$ rappresenta la dimensione del vocabolario.
+
+Di conseguenza:
+
+\begin{equation}
+Z\in\mathbb{R}^{N\times |V|}
+\end{equation}
+
+La matrice $Z$ contiene i cosiddetti \textit{logits}: per ogni posizione della sequenza, contiene un valore associato a ciascun token del vocabolario.
+
+Successivamente, viene applicata la funzione Softmax lungo la dimensione del vocabolario:
+
+\begin{equation}
+P
+=
+\operatorname{Softmax}(H^L W^O)
+\end{equation}
+
+ottenendo:
+
+\begin{equation}
+P\in\mathbb{R}^{N\times |V|}
+\end{equation}
+
+In particolare, l'elemento $P_{i,j}$ rappresenta la probabilità assegnata al $j$-esimo token del vocabolario dati $i$ \textbf{token precedenti}.
+
+Pertanto, ogni riga della matrice $P$ rappresenta una distribuzione di probabilità sull'intero vocabolario:
+
+\begin{equation}
+\sum_{j=1}^{|V|}P_{i,j}=1
+\end{equation}
+
+
+La prima riga rappresenta quindi la distribuzione:
+
+\begin{equation}
+P(x_1\mid x_0)
+\end{equation}
+
+ossia le probabilità dei possibili token successivi dato il token ``Il''.
+
+La seconda riga rappresenta invece:
+
+\begin{equation}
+P(x_2\mid x_0,x_1)
+\end{equation}
+
+
+\textbf{Nota: Il token $x_0$ non viene prodotto perchè come abbiamo visto nella sezione precedente, da tutta la sua probabilità a quello di inizio, quindi supponiamo sia sempre il token iniziale $x_0$}
+
+
+Questa architettura \textbf{Decoder-Only Transformer} è tipicamente utilizzata per costruire modelli linguistici generativi (Generative Language Models). Quando questi modelli sono caratterizzati da un numero sufficientemente elevato di parametri e da capacità linguistiche generali, vengono comunemente definiti Large Language Models (LLMs).
+
+
+La matrice di quindi che caccia questo modello è di questo genere, una matrice $\mathbb{R}^{N \times \left\lvert V \right\rvert}$
+
+\[
+\begin{pmatrix}
+    P(.|x_0) \\
+    P(. | x_0 x_1) \\
+    \dots \\
+    P(. | x_0 x_1 \dots x_{N-1})
+\end{pmatrix}
+\]
+L'ultima riga, quindi da una distribuzione di probabilità sul prossimo token, perchè prende in input $\{x_0,x_1,\dots,x_{N-1}\}$
+La riga $i$, avrà come contesto la storia fino ad $i$.
+
+Quindi ricapitolando:
+
+Un LLM generativo può utilizzare un'architettura Decoder-only Transformer.
+Possiamo rappresentare la relazione gerarchica in questo modo:
+\begin{itemize}
+    \item \textbf{Language Model (LM)} : un modello che assegna probabilità alle sequenze di token;
+    \item \textbf{Generative Language Model} : un modello utilizzato per generare sequenze di token, ad esempio predicendo autoregressivamente il token successivo;
+    \item \textbf{Large Language Model (LLM)} : un Language Model di grandi dimensioni, addestrato su grandi quantità di dati;
+    \item \textbf{Decoder-only Transformer} : un'architettura comunemente utilizzata per realizzare LLM generativi.
+\end{itemize}
+
+\subsection{Addestramento degli LLM (Training LLMs)}
+
+In input riceve quindi un set di token
+$\{x_0,x_1,\dots,x_N\}$, questi vengono rappresentati in una matrice
+$X$, dove sulla riga $n$-esima vi è $x_n^T$.
+
+Nel caso del \textbf{Decoder Only Transformer}, che abbiamo visto prima,
+ogni riga della matrice di output produce una distribuzione di probabilità
+sul vocabolario, che rappresenta la probabilità del token successivo
+dato il contesto precedente, grazie alla \textbf{causal mask}.
+
+Ad esempio, considerando la sequenza:
+
+\begin{equation}
+x_0 = \langle BOS \rangle,\quad
+x_1 = \text{Il},\quad
+x_2 = \text{gatto},\quad
+x_3 = \text{corre}
+\end{equation}
+
+il modello produce contemporaneamente le seguenti predizioni:
+
+\begin{center}
+\begin{tabular}{c|c|c}
+\textbf{Contesto disponibile} & \textbf{Token da predire} & \textbf{Distribuzione prodotta} \\
+\hline
+$x_0$ & $x_1$ & $Pr(\cdot \mid x_0)$ \\
+$x_0,x_1$ & $x_2$ & $Pr(\cdot \mid x_0,x_1)$ \\
+$x_0,x_1,x_2$ & $x_3$ & $Pr(\cdot \mid x_0,x_1,x_2)$
+\end{tabular}
+\end{center}
+
+Quindi, alla prima riga della matrice delle probabilità vi sarà
+$Pr(\cdot \mid x_0)$, alla seconda $Pr(\cdot \mid x_0,x_1)$ e così via.
+La probabilità del token corretto alla prima posizione sarà quindi
+$Pr(x_1 \mid x_0)$, alla seconda $Pr(x_2 \mid x_0,x_1)$, ecc., perchè quello che voglio è che per ogni token, predirre il prossimo token della sequenza.
+
+\subsubsection{Log-likelihood}
+
+Sia dato un dataset di addestramento $\mathcal{D}$ composto da $K$
+sequenze. La verosimiglianza logaritmica (log-likelihood) per una
+sequenza $x = x_0,\dots,x_m$ in $\mathcal{D}$ è definita come:
+
+\begin{equation}
+\mathcal{J}_\theta(x)
+=
+\sum_{i=1}^{m}
+\log Pr_\theta(x_i \mid x_0,\dots,x_{i-1})
+\end{equation}
+
+dove il pedice $\theta$ indica i parametri ottimizzabili del modello
+linguistico.
+
+\textbf{NOTA:} l'indice parte da $1$ perché $x_0$ è il token di inizio
+della sequenza (BOS). Di conseguenza, possiamo considerare:
+
+\begin{equation}
+Pr(x_0)=1
+\end{equation}
+
+e quindi:
+
+\begin{equation}
+\log Pr(x_0)=\log(1)=0
+\end{equation}
+
+Pertanto, il termine relativo a $x_0$ non contribuisce alla
+log-likelihood.
+
+\subsubsection{Obiettivo dell'addestramento}
+
+L'obiettivo dell'addestramento, detto \textbf{Maximum Likelihood
+Training}, è trovare i parametri $\hat{\theta}$ che massimizzano la
+log-likelihood totale su tutto il dataset:
+
+\begin{equation}
+\hat{\theta}
+=
+\arg\max_\theta
+\sum_{x \in \mathcal{D}}
+\mathcal{J}_\theta(x)
+\end{equation}
+
+In altre parole, il modello deve imparare dei parametri $\theta$ tali
+da assegnare una probabilità elevata ai token corretti nelle sequenze
+del dataset.
+
+\subsubsection{Dal Transformer alla log-likelihood}
+
+La formula precedente definisce \textbf{l'obiettivo matematico}
+dell'addestramento, ma non descrive ancora come i parametri del
+Transformer vengono effettivamente modificati.
+
+Il processo di addestramento può essere schematizzato come:
+
+\begin{equation}
+\boxed{
+\text{Forward Pass}
+\rightarrow
+\text{Loss}
+\rightarrow
+\text{Backpropagation}
+\rightarrow
+\text{Aggiornamento dei parametri}
+}
+\end{equation}
+
+\paragraph{1. Forward Pass}
+
+La sequenza viene fornita al Transformer:
+
+\begin{equation}
+X
+\overset{\text{Transformer}_\theta}{\longrightarrow}
+H^L
+\end{equation}
+
+dove $H^L$ è la matrice delle rappresentazioni prodotta dall'ultimo
+blocco Transformer.
+
+Successivamente viene applicato il livello finale che proietta le
+rappresentazioni nello spazio del vocabolario:
+
+\begin{equation}
+Z = H^L W^O
+\end{equation}
+
+dove $W^O$ è la matrice dei pesi dell'ultimo livello e $Z$ contiene
+i cosiddetti \textit{logits}.
+
+Applicando la funzione Softmax otteniamo:
+
+\begin{equation}
+P_\theta = \operatorname{Softmax}(Z)
+\end{equation}
+
+dove ogni riga di $P_\theta$ rappresenta una distribuzione di
+probabilità sui possibili token successivi.
+
+Pertanto:
+
+\begin{equation}
+P_\theta =
+\begin{bmatrix}
+Pr_\theta(\cdot \mid x_0) \\
+Pr_\theta(\cdot \mid x_0,x_1) \\
+\vdots \\
+Pr_\theta(\cdot \mid x_0,\dots,x_{m-1})
+\end{bmatrix}
+\end{equation}
+
+\paragraph{2. Calcolo della Loss}
+
+Durante l'addestramento non vogliamo semplicemente ottenere una
+distribuzione di probabilità: vogliamo che la probabilità assegnata al
+token corretto sia elevata.
+
+Per questo motivo consideriamo, per ogni posizione, la probabilità
+assegnata al token corretto:
+
+\begin{equation}
+Pr_\theta(x_i \mid x_0,\dots,x_{i-1})
+\end{equation}
+
+La log-likelihood è:
+
+\begin{equation}
+\mathcal{J}_\theta(x)
+=
+\sum_{i=1}^{m}
+\log Pr_\theta(x_i \mid x_0,\dots,x_{i-1})
+\end{equation}
+
+Poiché gli algoritmi di ottimizzazione vengono normalmente formulati
+come problemi di \textbf{minimizzazione}, si introduce la
+\textbf{negative log-likelihood} (NLL):
+
+\begin{equation}
+\mathcal{L}(\theta)
+=
+-\mathcal{J}_\theta(x)
+\end{equation}
+
+e quindi:
+
+\begin{equation}
+\boxed{
+\mathcal{L}(\theta)
+=
+-\sum_{i=1}^{m}
+\log Pr_\theta(x_i \mid x_0,\dots,x_{i-1})
+}
+\end{equation}
+
+Questa quantità corrisponde, nel caso della predizione del token
+successivo, alla \textbf{Cross-Entropy Loss}.
+
+Se il modello assegna una probabilità elevata al token corretto,
+il termine:
+
+\begin{equation}
+-\log Pr_\theta(x_i \mid x_0,\dots,x_{i-1})
+\end{equation}
+
+sarà piccolo.
+
+Viceversa, se il modello assegna una probabilità bassa al token
+corretto, il termine sarà grande.
+
+Ad esempio:
+
+\begin{equation}
+Pr_\theta(x_i \mid x_0,\dots,x_{i-1}) = 0.9
+\quad\Rightarrow\quad
+-\log(0.9) \approx 0.105
+\end{equation}
+
+mentre:
+
+\begin{equation}
+Pr_\theta(x_i \mid x_0,\dots,x_{i-1}) = 0.1
+\quad\Rightarrow\quad
+-\log(0.1) \approx 2.303
+\end{equation}
+
+Quindi la loss penalizza maggiormente il modello quando assegna una
+bassa probabilità al token corretto.
+
+\paragraph{3. Backpropagation}
+
+La loss dipende dai parametri $\theta$ del Transformer. Possiamo quindi
+calcolare il gradiente della loss rispetto a tali parametri:
+
+\begin{equation}
+\nabla_\theta \mathcal{L}(\theta)
+\end{equation}
+
+Il gradiente viene calcolato tramite il processo di
+\textbf{backpropagation}, che permette di determinare come ogni
+parametro del modello ha contribuito alla loss.
+
+In particolare, il gradiente indica come modificare i parametri per
+ridurre la loss.
+
+\paragraph{4. Aggiornamento dei parametri}
+
+Un algoritmo di ottimizzazione, ad esempio \textbf{Adam}, utilizza il
+gradiente per aggiornare i parametri del Transformer.
+
+Concettualmente, un aggiornamento tramite gradient descent può essere
+scritto come:
+
+\begin{equation}
+\boxed{
+\theta
+\leftarrow
+\theta - \eta \nabla_\theta \mathcal{L}(\theta)
+}
+\end{equation}
+
+dove $\eta$ è il \textit{learning rate}.
+
+In questo modo i parametri vengono modificati affinché, al successivo
+forward pass, il modello tenda ad assegnare una probabilità maggiore
+ai token corretti.
+
+\subsubsection{Esempio completo}
+
+Consideriamo nuovamente la sequenza:
+
+\begin{equation}
+[BOS,\ \text{Il},\ \text{gatto},\ \text{corre}]
+\end{equation}
+
+Il Transformer riceve l'intera sequenza contemporaneamente.
+
+Grazie alla causal mask, vengono prodotte contemporaneamente le
+seguenti predizioni:
+
+\begin{equation}
+Pr_\theta(\text{Il}\mid BOS)
+\end{equation}
+
+\begin{equation}
+Pr_\theta(\text{gatto}\mid BOS,\text{Il})
+\end{equation}
+
+\begin{equation}
+Pr_\theta(\text{corre}\mid BOS,\text{Il},\text{gatto})
+\end{equation}
+
+Supponiamo che il modello produca:
+
+\begin{equation}
+Pr_\theta(\text{Il}\mid BOS)=0.7
+\end{equation}
+
+\begin{equation}
+Pr_\theta(\text{gatto}\mid BOS,\text{Il})=0.2
+\end{equation}
+
+\begin{equation}
+Pr_\theta(\text{corre}\mid BOS,\text{Il},\text{gatto})=0.8
+\end{equation}
+
+La log-likelihood della sequenza è quindi:
+
+\begin{equation}
+\mathcal{J}_\theta(x)
+=
+\log(0.7)+\log(0.2)+\log(0.8)
+\end{equation}
+
+e la corrispondente loss è:
+
+\begin{equation}
+\mathcal{L}(\theta)
+=
+-\log(0.7)-\log(0.2)-\log(0.8)
+\end{equation}
+
+La loss viene quindi utilizzata per calcolare il gradiente rispetto
+ai parametri $\theta$ del Transformer. Attraverso la backpropagation,
+questo gradiente viene propagato attraverso tutti i componenti del
+modello, fino ai suoi parametri.
+
+Infine, un ottimizzatore come Adam aggiorna i parametri:
+
+\begin{equation}
+\theta
+\leftarrow
+\theta-\eta\nabla_\theta\mathcal{L}(\theta)
+\end{equation}
+
+Il processo viene ripetuto su moltissime sequenze del dataset,
+aggiornando progressivamente i parametri del modello.
+
+\begin{warning}
+Durante il training, il modello \textbf{non deve necessariamente
+generare un token alla volta}. L'intera sequenza può essere fornita
+contemporaneamente al Transformer.
+
+La causal mask impedisce però a ciascuna posizione di utilizzare
+informazioni provenienti dai token futuri. In questo modo, dalla stessa
+sequenza, il modello può imparare contemporaneamente a predire tutti
+i token successivi.
+\end{warning}
+
+In sintesi, l'intero processo di addestramento può essere rappresentato
+come:
+
+\begin{equation}
+\boxed{
+X
+\rightarrow
+\text{Transformer}_\theta
+\rightarrow
+\text{Logits}
+\rightarrow
+\text{Softmax}
+\rightarrow
+\text{Probabilità}
+\rightarrow
+\text{Loss}
+\rightarrow
+\text{Backpropagation}
+\rightarrow
+\text{Aggiornamento di }\theta
+}
+\end{equation}
+
+L'obiettivo finale è ottenere parametri $\hat{\theta}$ tali che il
+modello assegni alta probabilità ai token corretti:
+
+\begin{equation}
+\boxed{
+\hat{\theta}
+=
+\arg\max_\theta
+\sum_{x\in\mathcal{D}}
+\mathcal{J}_\theta(x)
+}
+\end{equation}
+
+ovvero, equivalentemente, minimizzare la negative log-likelihood
+sull'intero dataset.
+
+\subsection{Fine-tuning e Applicazione degli LLM (Fine-tuning and Applying LLMs)}
+
+
+
+Una volta effettuato il pre-addestramento, l'LLM ha incamerato vaste conoscenze testuali, ma solitamente non è specializzato per eseguire task o seguire comandi dell'utente. Nell'era dell'AI generativa, gli LLM sono usati come sistemi completi: formuliamo un problema in linguaggio naturale (il \textit{prompt}) e lasciamo che il modello lo completi autoregressivamente.
+
+\textbf{Quindi qua già abbiamo affrontato la fase di allenamento, abbiamo pesi fissi, e stiamo affrontando la fase di generazione}
+
+Formalmente, dato un prompt utente
+\[
+x = x_0,\ldots,x_m
+\]
+che rappresenta il contesto, e una risposta
+\[
+y = y_1,\ldots,y_n,
+\]
+la generazione consiste nel trovare la sequenza di token $\hat{y}$ più probabile dato il contesto $x$:
+
+\begin{equation}
+\hat{y}
+=
+\arg\max_y \Pr(y\mid x).
+\end{equation}
+
+Poiché il logaritmo è una funzione monotona crescente, massimizzare la probabilità equivale a massimizzarne il logaritmo:
+
+\begin{equation}
+\hat{y}
+=
+\arg\max_y \log \Pr(y\mid x).
+\end{equation}
+
+Per comprendere come viene calcolata $\Pr(y\mid x)$, è necessario ricordare che $y$ non è un singolo elemento, ma una sequenza di token:
+\[
+y=(y_1,\ldots,y_n).
+\]
+
+Pertanto,
+
+\begin{equation}
+\Pr(y\mid x)
+=
+\Pr(y_1,\ldots,y_n\mid x).
+\end{equation}
+
+A questo punto si applica la \textbf{chain rule della probabilità}. In generale, per una sequenza di variabili aleatorie vale:
+
+\begin{equation}
+\Pr(A_1,\ldots,A_n)
+=
+\prod_{i=1}^{n}
+\Pr(A_i\mid A_1,\ldots,A_{i-1}).
+\end{equation}
+
+Applicando questa regola alla sequenza $y$ condizionata al contesto $x$, otteniamo:
+
+\begin{equation}
+\Pr(y_1,\ldots,y_n\mid x)
+=
+\prod_{i=1}^{n}
+\Pr(y_i\mid x,y_1,\ldots,y_{i-1}).
+\end{equation}
+
+Quindi la probabilità dell'intera risposta è ottenuta come prodotto delle probabilità condizionate dei singoli token:
+
+\begin{equation}
+\boxed{
+\Pr(y\mid x)
+=
+\prod_{i=1}^{n}
+\Pr(y_i\mid x,y_1,\ldots,y_{i-1})
+}
+\end{equation}
+
+Questa decomposizione esprime il principio fondamentale della \textbf{generazione autoregressiva}: per generare il token $y_i$, il modello utilizza il prompt $x$ e tutti i token della risposta generati precedentemente.
+
+\subsubsection*{Passaggio dal prodotto alla sommatoria}
+
+La formula precedente contiene un prodotto di probabilità. Tuttavia, lavorare direttamente con prodotti può essere numericamente scomodo, soprattutto quando la sequenza è lunga. Per questo si considera il logaritmo della probabilità.
+
+Applicando il logaritmo alla decomposizione precedente:
+
+\begin{equation}
+\log \Pr(y\mid x)
+=
+\log
+\left(
+\prod_{i=1}^{n}
+\Pr(y_i\mid x,y_1,\ldots,y_{i-1})
+\right).
+\end{equation}
+
+Utilizzando la proprietà del logaritmo
+
+\begin{equation}
+\log(ab)=\log a+\log b,
+\end{equation}
+
+e, più in generale,
+
+\begin{equation}
+\log\left(\prod_i a_i\right)
+=
+\sum_i \log a_i,
+\end{equation}
+
+si ottiene:
+
+\begin{equation}
+\boxed{
+\log \Pr(y\mid x)
+=
+\sum_{i=1}^{n}
+\log
+\Pr(y_i\mid x,y_1,\ldots,y_{i-1})
+}
+\end{equation}
+
+Pertanto, l'obiettivo della generazione può essere scritto come:
+
+\begin{equation}
+\boxed{
+\hat{y}
+=
+\arg\max_y
+\sum_{i=1}^{n}
+\log
+\Pr(y_i\mid x,y_1,\ldots,y_{i-1})
+}
+\end{equation}
+
+che corrisponde alla formulazione mostrata nell'Eq. (4.39).
+
+Per semplicità, indicando con
+
+\[
+y_{<i}=y_1,\ldots,y_{i-1},
+\]
+
+la stessa equazione può essere scritta in forma compatta:
+
+\begin{equation}
+\boxed{
+\hat{y}
+=
+\arg\max_y
+\sum_{i=1}^{n}
+\log
+\Pr(y_i\mid x,y_{<i})
+}
+\end{equation}
+
+Pertanto in finale si vuole trovare l'$y$ che massimizza $Pr(y | x)$, cioè ovviamente la generazione, dopo l'allenamento vuole massimizzare l'$y$ che caccia fuori in quel modo.
+
+\subsubsection*{Interpretazione nel Decoder-Only Transformer}
+
+Nel caso di un \textbf{Decoder-Only Transformer}, come quelli utilizzati negli LLM autoregressivi, il termine
+
+\[
+\Pr(y_i\mid x,y_{<i})
+\]
+
+rappresenta la distribuzione di probabilità prevista dal modello per il prossimo token, dato tutto il contesto disponibile fino a quel momento.
+
+Indicando con
+
+\[
+c_i=(x_0,\ldots,x_m,y_1,\ldots,y_{i-1})
+\]
+
+il contesto disponibile al passo $i$, il modello calcola:
+
+\begin{equation}
+\Pr(y_i\mid c_i).
+\end{equation}
+
+Il Transformer riceve quindi la sequenza dei token precedenti e produce, attraverso i propri strati di self-attention e feed-forward, una rappresentazione del contesto. Tale rappresentazione viene trasformata in una distribuzione di probabilità sui token del vocabolario:
+
+\begin{equation}
+c_i
+\longrightarrow
+\text{Transformer}
+\longrightarrow
+\text{logits}
+\longrightarrow
+\text{softmax}
+\longrightarrow
+\Pr(\text{token}\mid c_i).
+\end{equation}
+
+In particolare, se $\mathbf{z}_i$ rappresenta il vettore dei logits prodotto dal modello al passo $i$, la distribuzione sul vocabolario $V$ viene ottenuta tramite la funzione softmax:
+
+\begin{equation}
+\Pr(v\mid c_i)
+=
+\frac{\exp(z_{i,v})}
+{\sum_{u\in V}\exp(z_{i,u})},
+\qquad v\in V.
+\end{equation}
+
+Il modello utilizza quindi la probabilità associata al token corretto $y_i$:
+
+\begin{equation}
+\Pr(y_i\mid c_i).
+\end{equation}
+
+Durante la generazione, il token successivo viene scelto in base a questa distribuzione e successivamente aggiunto al contesto. Il processo viene quindi ripetuto autoregressivamente:
+
+\begin{align*}
+c_1 &\rightarrow \Pr(y_1\mid c_1) \rightarrow y_1,\\
+c_2 &\rightarrow \Pr(y_2\mid c_2) \rightarrow y_2,\\
+&\vdots\\
+c_n &\rightarrow \Pr(y_n\mid c_n) \rightarrow y_n.
+\end{align*}
+
+La \textbf{causal self-attention} garantisce che, nel momento in cui il modello predice $y_i$, non possa accedere ai token futuri $y_i,\ldots,y_n$. Il modello può quindi utilizzare solamente il prompt e i token precedentemente generati.
+
+
+Un secondo metodo fondamentale per applicare gli LLM — divenuto lo standard de facto nella ricerca recente — consiste nell'adattare i modelli tramite un processo di affinamento dei parametri (fine-tuning). In questo modo, la capacità di predizione dei token appresa nella fase di pre-addestramento (pre-training) viene generalizzata per svolgere nuovi compiti specifici (downstream tasks).
+
+\textbf{Principio sottostante:} Durante il pre-addestramento, il modello acquisisce una conoscenza generale della lingua (general knowledge of language); tuttavia, è necessario un meccanismo per attivare tale conoscenza e indirizzarla verso compiti specifici. Per ottenere ciò, si esegue un lieve aggiornamento dei parametri del modello utilizzando dati che mostrano come seguire le istruzioni (instruction-following data). Questo approccio prende il nome di instruction fine-tuning 
+(o instruction tuning), nel paragrafo di dopo ci sono alcune istruzioni come esempi.
+
+\subsubsection{Esempi Pratici di Campioni per l'Instruction Fine-Tuning}
+Per comprendere la struttura dei dati di instruction fine-tuning, il testo presenta diversi esempi di coppia istruzione-risposta:
+
+\begin{itemize}
+    \item \textbf{Generazione di Risposte Testuali / Ricette:} \\
+    Prompt / Istruzione ($x$): "Show me a recipe for making ice cream." \\
+    Risposta Target ($y$): Lista strutturata di ingredienti e passaggi sequenziali (Ingredients: 2 cups heavy cream... Steps: 1. Whisk all ingredients...).
+    
+    \item \textbf{Risoluzione di Problemi / Ragionamento Matematico:} \\
+    Prompt / Istruzione ($x$): "If you buy 5 apples and each apple costs \$1.20, how much do you spend in total?" \\
+    Risposta Target ($y$): "\$6.00".
+    
+    \item \textbf{Generazione di Codice (Code Generation):} \\
+    Prompt / Istruzione ($x$): "Write a Python program to calculate the sum of squares of the following numbers. 1, 2, 10, -9, 78" \\
+    Risposta Target ($y$):
+\begin{verbatim}
+numbers = [1, 2, 10, -9, 78]
+sum_of_squares = sum(x**2 for x in numbers)
+print(sum_of_squares)
+\end{verbatim}
+\end{itemize}
+
+\section*{Formulazione Matematica dell'Obiettivo di Fine-Tuning}
+
+Una volta curato il dataset di istruzioni $\mathcal{D}_{tune}$, il processo di ottimizzazione può essere concettualizzato come un addestramento standard di reti neurali analogo al pre-addestramento, ma eseguito su un insieme di dati molto più ridotto.
+
+Sia $\hat{\theta}$ l'insieme dei parametri del modello ottimizzati durante la fase di pre-addestramento. Modificando l'obiettivo di pre-addestramento dell'Equazione (2.14), si definisce l'obiettivo del fine-tuning come:
+
+\begin{equation}
+\tilde{\theta}
+=
+\arg\max_{\hat{\theta}^+}
+\sum_{sample \in \mathcal{D}_{tune}}
+J_{\hat{\theta}^+}(sample)
+\tag{2.16}
+\end{equation}
+
+\textbf{Simbologia:}
+
+\begin{itemize}
+
+    \item $\tilde{\theta}$ rappresenta l'insieme dei parametri ottimi risultanti dal fine-tuning.
+
+    \item La notazione $\hat{\theta}^+$ indica esplicitamente che il processo di ottimizzazione parte dai parametri pre-addestrati $\hat{\theta}$ (e non da un'inizializzazione casuale).
+
+\end{itemize}
+
+In altre parole, il processo può essere visto come una sequenza di due fasi:
+
+\begin{equation}
+\boxed{
+\text{Pre-training}
+\longrightarrow
+\hat{\theta}
+\longrightarrow
+\text{Fine-tuning}
+\longrightarrow
+\tilde{\theta}
+}
+\end{equation}
+
+Il fine-tuning non addestra quindi un modello partendo da zero: sfrutta le conoscenze linguistiche apprese durante il pre-training e modifica i parametri del modello per adattarlo al comportamento desiderato.
+
+\section*{Decomposizione del Campione e Calcolo della Loss}
+
+Ogni campione $sample \in \mathcal{D}_{tune}$ viene suddiviso in due parti: un segmento di input $x_{sample}$ e un segmento di output $y_{sample}$:
+
+\begin{equation}
+sample = [x_{sample}, y_{sample}]
+\tag{2.17}
+\end{equation}
+
+Ad esempio, un campione del dataset può essere:
+
+\begin{quote}
+\textbf{Input:} Traduci in inglese: ``Il gatto è sul tavolo.''
+
+\textbf{Output:} ``The cat is on the table.''
+\end{quote}
+
+In questo caso:
+
+\begin{equation}
+x_{sample}
+=
+\text{``Traduci in inglese: Il gatto è sul tavolo.''}
+\end{equation}
+
+mentre:
+
+\begin{equation}
+y_{sample}
+=
+\text{``The cat is on the table.''}
+\end{equation}
+
+La funzione di log-verosimiglianza $J_{\hat{\theta}^+}(sample)$ viene definita come:
+
+\begin{equation}
+J_{\hat{\theta}^+}(sample)
+=
+\log Pr_{\hat{\theta}^+}(y_{sample} \mid x_{sample})
+\tag{2.18}
+\end{equation}
+
+Questa espressione indica la log-probabilità che il modello assegna alla
+risposta desiderata $y_{sample}$, quando riceve come input
+$x_{sample}$.
+
+\subsection*{Probabilità della Risposta}
+
+Poiché il modello è autoregressivo, la probabilità dell'intera risposta
+viene scomposta nella probabilità dei singoli token che la compongono.
+
+Sia:
+
+\begin{equation}
+y_{sample}
+=
+[y_1,y_2,\dots,y_m]
+\end{equation}
+
+Allora, utilizzando la chain rule della probabilità:
+
+\begin{equation}
+Pr_{\hat{\theta}^+}(y_{sample}\mid x_{sample})
+=
+\prod_{i=1}^{m}
+Pr_{\hat{\theta}^+}
+\left(
+y_i
+\mid
+x_{sample},y_1,\dots,y_{i-1}
+\right)
+\end{equation}
+
+Di conseguenza, applicando il logaritmo:
+
+\begin{equation}
+\boxed{
+J_{\hat{\theta}^+}(sample)
+=
+\sum_{i=1}^{m}
+\log
+Pr_{\hat{\theta}^+}
+\left(
+y_i
+\mid
+x_{sample},y_1,\dots,y_{i-1}
+\right)
+}
+\end{equation}
+
+Quindi, anche durante il fine-tuning, il Decoder Only Transformer
+continua a imparare attraverso la \textbf{predizione autoregressiva del
+token successivo}. La differenza è che il modello viene addestrato a
+produrre una specifica risposta $y_{sample}$ data una determinata
+istruzione $x_{sample}$.
+
+\subsection*{Esempio di Predizione Autoregressiva}
+
+Consideriamo il seguente campione:
+
+\begin{equation}
+x_{sample}
+=
+\text{``Traduci in inglese: Il gatto è sul tavolo.''}
+\end{equation}
+
+e:
+
+\begin{equation}
+y_{sample}
+=
+[\text{The},\text{cat},\text{is},\text{on},\text{the},\text{table}]
+\end{equation}
+
+La probabilità della risposta completa viene calcolata come:
+
+\begin{align}
+Pr(y_{sample}\mid x_{sample})
+={}&
+Pr(\text{The}\mid x_{sample})
+\\
+&\cdot
+Pr(\text{cat}\mid x_{sample},\text{The})
+\\
+&\cdot
+Pr(\text{is}\mid x_{sample},\text{The},\text{cat})
+\\
+&\cdot
+Pr(\text{on}\mid x_{sample},\text{The},\text{cat},\text{is})
+\\
+&\cdot
+Pr(\text{the}\mid x_{sample},\text{The},\text{cat},\text{is},\text{on})
+\\
+&\cdot
+Pr(\text{table}\mid x_{sample},\text{The},\text{cat},\text{is},\text{on},\text{the})
+\end{align}
+
+Pertanto, la log-verosimiglianza è:
+
+\begin{align}
+J_{\hat{\theta}^+}(sample)
+={}&
+\log Pr(\text{The}\mid x_{sample})
+\\
+&+
+\log Pr(\text{cat}\mid x_{sample},\text{The})
+\\
+&+
+\log Pr(\text{is}\mid x_{sample},\text{The},\text{cat})
+\\
+&+\dots
+\end{align}
+
+L'obiettivo del fine-tuning è quindi fare in modo che il modello
+assegni una probabilità elevata ai token della risposta desiderata.
+
+\section*{Dalla Log-Likelihood alla Loss}
+
+L'obiettivo matematico precedente è formulato come un problema di
+\textbf{massimizzazione}:
+
+\begin{equation}
+\max_{\theta} J_\theta(sample)
+\end{equation}
+
+Tuttavia, gli algoritmi di ottimizzazione delle reti neurali vengono
+normalmente formulati come problemi di \textbf{minimizzazione}. Per
+questo motivo si considera la \textbf{Negative Log-Likelihood (NLL)}:
+
+\begin{equation}
+\boxed{
+\mathcal{L}_{\hat{\theta}^+}(sample)
+=
+-
+J_{\hat{\theta}^+}(sample)
+}
+\end{equation}
+
+ovvero:
+
+\begin{equation}
+\boxed{
+\mathcal{L}_{\hat{\theta}^+}(sample)
+=
+-
+\sum_{i=1}^{m}
+\log
+Pr_{\hat{\theta}^+}
+\left(
+y_i
+\mid
+x_{sample},y_1,\dots,y_{i-1}
+\right)
+}
+\end{equation}
+
+Questa loss corrisponde alla \textbf{Cross-Entropy Loss} utilizzata
+per la predizione dei token.
+
+Se il modello assegna una probabilità elevata al token corretto, il
+corrispondente termine della loss sarà piccolo:
+
+\begin{equation}
+Pr(y_i\mid\cdots)=0.9
+\quad\Longrightarrow\quad
+-\log(0.9)\approx0.105
+\end{equation}
+
+Viceversa, se assegna una probabilità bassa:
+
+\begin{equation}
+Pr(y_i\mid\cdots)=0.1
+\quad\Longrightarrow\quad
+-\log(0.1)\approx2.303
+\end{equation}
+
+Pertanto, durante il fine-tuning, il modello viene incentivato ad
+assegnare probabilità elevate ai token della risposta desiderata.
+
+\section*{Ottimizzazione dei Parametri}
+
+Il processo di fine-tuning segue quindi un procedimento analogo a
+quello del pre-training:
+
+\begin{equation}
+\boxed{
+\text{Input}
+\rightarrow
+\text{Transformer}
+\rightarrow
+\text{Probabilità dei token}
+\rightarrow
+\text{Loss}
+\rightarrow
+\text{Backpropagation}
+\rightarrow
+\text{Aggiornamento dei parametri}
+}
+\end{equation}
+
+In particolare, per un campione $(x_{sample},y_{sample})$, il modello
+esegue un \textbf{forward pass} e calcola:
+
+\begin{equation}
+\mathcal{L}_{\hat{\theta}^+}(sample)
+=
+-\log
+Pr_{\hat{\theta}^+}
+(y_{sample}\mid x_{sample})
+\end{equation}
+
+Successivamente viene calcolato il gradiente:
+
+\begin{equation}
+\nabla_\theta
+\mathcal{L}_{\hat{\theta}^+}(sample)
+\end{equation}
+
+tramite la \textbf{backpropagation}.
+
+Un algoritmo di ottimizzazione, come Adam, utilizza quindi il gradiente
+per modificare i parametri del modello. Concettualmente:
+
+\begin{equation}
+\theta
+\leftarrow
+\theta-\eta\nabla_\theta\mathcal{L}(\theta)
+\end{equation}
+
+Il processo viene ripetuto sui campioni del dataset
+$\mathcal{D}_{tune}$, fino a ottenere i parametri $\tilde{\theta}$.
+
+\section*{Differenza Fondamentale con il Pre-training}
+
+A differenza del pre-addestramento, nel fine-tuning supervisionato per
+istruzioni ogni campione è organizzato esplicitamente come una coppia:
+
+\begin{equation}
+\boxed{
+\text{Input }x_{sample}
+\quad\longrightarrow\quad
+\text{Output desiderato }y_{sample}
+}
+\end{equation}
+
+Nel pre-training, invece, il testo stesso fornisce automaticamente i
+target attraverso la predizione del token successivo.
+
+Ad esempio, nel pre-training:
+
+\begin{equation}
+[x_0,x_1,x_2]
+\longrightarrow
+[x_1,x_2,x_3]
+\end{equation}
+
+mentre nel fine-tuning:
+
+\begin{equation}
+\underbrace{[x_{sample}]}_{\text{istruzione}}
+\longrightarrow
+\underbrace{[y_1,y_2,\dots,y_m]}_{\text{risposta desiderata}}
+\end{equation}
+
+In entrambi i casi, tuttavia, un Decoder Only Transformer utilizza la
+predizione autoregressiva dei token.
+
+La differenza principale riguarda quindi \textbf{quali token vengono
+considerati come target della loss}.
+
+\begin{warning}
+Nel fine-tuning per istruzioni, la loss viene calcolata esclusivamente
+sui token della risposta $y_{sample}$ e non sui token dell'istruzione
+$x_{sample}$.
+
+L'input $x_{sample}$ fornisce il contesto necessario per predire la
+risposta, mentre i token di $y_{sample}$ costituiscono i target rispetto
+ai quali viene calcolata la loss.
+\end{warning}
+
+In sintesi:
+
+\begin{equation}
+\boxed{
+\begin{array}{c}
+\textbf{Pre-training}\\
+\text{Testo non annotato}
+\\
+\downarrow
+\\
+\text{Next-token prediction}
+\\
+\downarrow
+\\
+\hat{\theta}
+\end{array}
+}
+\qquad
+\Longrightarrow
+\qquad
+\boxed{
+\begin{array}{c}
+\textbf{Fine-tuning}\\
+\text{Istruzioni + risposte}
+\\
+\downarrow
+\\
+Pr(y_{sample}\mid x_{sample})
+\\
+\downarrow
+\\
+\tilde{\theta}
+\end{array}
+}
+\end{equation}
+
+Il fine-tuning può quindi essere interpretato come un adattamento di un
+LLM già pre-addestrato: il modello possiede già una conoscenza
+linguistica generale grazie al pre-training e, attraverso il dataset
+$\mathcal{D}_{tune}$, viene ottimizzato affinché impari a produrre le
+risposte desiderate in corrispondenza delle istruzioni ricevute.
+
+
+\section*{Dettagli Implementativi Algoritmici: Forward Pass e Backward Pass}
+Nello sviluppo pratico dell'algoritmo di retropropagazione dell'errore (back-propagation) per l'Equazione (2.18):
+
+\begin{itemize}
+    \item \textbf{Passaggio In Avanti (Forward Pass):} La sequenza concatenata $[x_{sample}, y_{sample}]$ viene costruita ed elaborata dal modello come di consueto per generare le rappresentazioni e le predizioni.
+    \item \textbf{Passaggio All'Indietro (Backward Pass):} I gradienti dell'errore (error gradients) vengono calcolati e retropropagati solo ed esclusivamente attraverso le parti della rete corrispondenti ai token di $y_{sample}$. I gradienti relativi alla sezione di contesto/input $x_{sample}$ vengono forzati a zero, lasciando inalterata quella porzione durante l'aggiornamento.
+\end{itemize}
+
+\textbf{Esempio Didattico di Calcolo della Loss:} \\
+Si consideri la sequenza complessiva:
+\[
+\underbrace{\langle s \rangle \text{ Square this number . 2 .}}_{\text{Contesto / Input } (x_{sample})} \quad \underbrace{\text{The result is 4 .}}_{\text{Predizione / Output } (y_{sample})}
+\]
+
+\begin{itemize}
+    \item Per la porzione di contesto (\texttt{<s> Square this number . 2 .}), il valore di loss assegnato per la retropropagazione è impostato a 0.
+    \item La loss viene effettivamente calcolata e retropropagata unicamente per i token della risposta target (\texttt{The result is 4 .}).
+\end{itemize}
+
+\section*{Considerazioni Ingegneristiche e Pratiche}
+L'esecuzione dell'instruction fine-tuning richiede un notevole sforzo ingegneristico e sperimentale:
+
+\begin{itemize}
+    \item Per ottenere risultati soddisfacenti, occorre sperimentare con diverse configurazioni dei principali iperparametri, tra cui il tasso di apprendimento (learning rate), la dimensione del batch (batch size) e il numero di passi di fine-tuning (fine-tuning steps).
+    \item Questo comporta lo svolgimento di molteplici cicli di addestramento e valutazione empirica (fine-tuning runs and evaluations).
+    \item Sebbene i costi e l'impegno sperimentale siano significativamente inferiori rispetto a quelli della fase di pre-addestramento, essi costituiscono un fattore critico che non deve essere trascurato.
+\end{itemize}
+
+\section*{Panoramica sulle Altre Applicazioni del Fine-Tuning}
+L'instruction fine-tuning costituisce un esempio rappresentativo, ma le tecniche di fine-tuning giocano un ruolo essenziale e pervasivo nello sviluppo degli LLM:
+
+\begin{itemize}
+    \item \textbf{Agenti Conversazionali (Chatbots):} Fine-tuning effettuato su dati di dialogo (dialog data) per gestire conversazioni strutturate.
+    \item \textbf{Gestione di Sequenze Lunghe (Long Sequence Modeling):} Adattamento dei modelli per estendere la finestra di contesto.
+    \item \textbf{Algoritmi di Fine-Tuning Efficienti:} Sviluppo di metodologie (Parameter-Efficient Fine-Tuning, PEFT) per ridurre ulteriormente l'impatto computazionale.
+\end{itemize}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\subsection{Ingegnerizzazione dei Prompt (Prompting LLMs)}
+Senza necessità di modificare i pesi del modello, l'interazione intelligente con un LLM passa attraverso l'ingegnerizzazione del testo di input.
+
+Una tecnica cruciale è l'\textbf{Apprendimento in-context (In-context Learning, ICL)}, un'abilità emergente degli LLM che permette loro di estrarre e imparare schemi logici direttamente dai dati in ingresso, nel momento dell'inferenza.
+L'ICL si sviluppa lungo tre approcci principali:
+\begin{itemize}
+\item \textbf{Zero-shot learning}: il modello deve risolvere un nuovo compito semplicemente seguendo un'istruzione descrittiva, senza avere alcun esempio nel prompt.
+\item \textbf{One-shot learning}: nel prompt viene fornito un singolo esempio dimostrativo (DEMO) con una correlazione corretta tra input e output, affinché il modello ne colga lo stile e la logica.
+\item \textbf{Few-shot learning}: il prompt è arricchito con vari esempi dimostrativi che chiariscono, ad esempio, strutture ricorrenti prima di richiedere l'elaborazione dell'input effettivo dell'utente (USER).
+\end{itemize}
+
+Quando il modello fallisce in compiti logico/matematici affrontandoli con ICL classico, entra in gioco la tecnica detta \textbf{Chain of Thought (CoT, Catena di Pensieri)}.
+\begin{definition}{Chain of Thought Prompting}
+Un metodo in cui si scompone un problema complesso (come calcoli matematici, ragionamento logico o commonsense) in una serie di passaggi logici intermedi che simulano l'approccio umano. Gli LLM vengono indotti ad emulare questa sequenza per arrivare con molta più affidabilità alla risposta corretta.
+\end{definition}
+
+Nella modalità \textbf{Few-shot CoT}, invece di fornire solo la coppia problema-soluzione, i DEMO conterranno il problema unito all'esatta procedura razionale step-by-step risolutiva. L'LLM, conformandosi al pattern espositivo, produrrà deduzioni intermedie e ridurrà drasticamente gli errori finali di inferenza.
+
+Nella modalità \textbf{Zero-shot CoT}, sfruttando una scoperta empirica ormai radicata nella comunità scientifica, si accoda dinamicamente un innesco linguistico fisso al prompt (una frase "trigger" del tipo: \textit{"Let's think step by step."}). Questa singola aggiunta altera la probabilità della distribuzione autoregressiva del modello a tal punto da obbligarlo a spacchettare il problema in ragionamenti indipendenti, permettendogli di giungere ad esiti logicamente corretti senza aver ricevuto nessun esempio formale precedente.
+\section{Training at Scale (Addestramento su Larga Scala)}
+Come primo passo nello sviluppo dei Large Language Models (LLM), è necessario addestrare questi modelli su grandi quantità di dati. Il compito di addestramento è standard: l'obiettivo è massimizzare la log-verosimiglianza (log-likelihood), il che può essere ottenuto tramite la discesa del gradiente (gradient descent). Tuttavia, quando si aumenta la scala sia della dimensione del modello sia della quantità di dati, il problema di ottimizzazione diventa altamente sfidante. Ad esempio, i modelli di grandi dimensioni rendono generalmente il processo di addestramento instabile. In questa sezione, discuteremo diverse problematiche inerenti all'addestramento su larga scala per gli LLM, tra cui la preparazione dei dati, le modifiche al modello e l'addestramento distribuito.
+
+\subsection{Data Preparation (Preparazione dei Dati)}
+L'importanza dei dati non può essere sopravvalutata nel campo del Natural Language Processing (NLP). Con lo sviluppo di reti neurali sempre più grandi, la richiesta di dati continua ad aumentare. Ad esempio, lo sviluppo di LLM può richiedere trilioni di token per il pre-training, ordini di grandezza superiori rispetto a quelli utilizzati per addestrare i modelli NLP convenzionali. In generale, si desidera raccogliere la maggior quantità possibile di dati di addestramento. Tuttavia, dataset più grandi non si traducono automaticamente in risultati migliori, e lo sviluppo degli LLM solleva nuovi problemi nella creazione o raccolta di questi dataset.
+
+\begin{observation}{Osservazione sulla grandezza del dataset}
+Nonostante il desiderio di raccogliere enormi quantità di dati, dataset di addestramento più grandi non garantiscono risultati di addestramento migliori senza un'attenta gestione delle problematiche sottostanti.
+\end{observation}
+
+Un primo problema è la \textbf{qualità dei dati}. Fornire direttamente testo grezzo proveniente da varie fonti a un modello è generalmente sconsigliato.
+\begin{definition}{Qualità dei Dati e Web Scraping}
+Una porzione significativa dei dati utilizzati per addestrare i recenti LLM proviene dal \textit{web scraping}, che spesso contiene errori e contenuti inappropriati, come linguaggio tossico (toxic language) e fatti inventati. Inoltre, Internet è sempre più inondato di contenuti generati da macchine, presentando ulteriori sfide per il filtraggio dei corpora prelevati dal web.
+\end{definition}
+
+\begin{observation}{Web Scraping}
+    Il Web Scraping è una tecnica informatica automatizzata utilizzata per estrarre dati e informazioni non strutturate dalle pagine web e convertirle in un formato strutturato e riutilizzabile (come file CSV, JSON o database).
+\end{observation}
+
+Migliorare la qualità dei dati richiede tipicamente l'integrazione di passaggi rigorosi di filtraggio e pulizia nel flusso di elaborazione dei dati. Ad esempio, adottando tecniche di elaborazione euristiche, il 90 dei dati estratti dal web può essere scartato prima dell'addestramento dell'LLM. Oltre al testo estratto dal web, i dati di addestramento degli LLM includono spesso libri, articoli accademici, contenuti generati dagli utenti sui social media e altri corpora diversificati. L'utilizzo di dataset combinati si è rivelato fondamentale per le elevate prestazioni dei modelli risultanti.
+
+Un secondo problema è la \textbf{diversità dei dati}. Si desidera che i dati di addestramento coprano il maggior numero possibile di tipologie di dati, affinché i modelli addestrati possano adattarsi facilmente a diversi compiti a valle (downstream tasks). È ampiamente riconosciuto che la qualità e la diversità dei dati di addestramento giocano un ruolo estremamente importante per gli LLM.
+\textbf{Esempio esplicativo:} L'inclusione di codice di programmazione nei dati di addestramento si è rivelata vantaggiosa per gli LLM. Questi benefici si dimostrano non solo nel potenziamento delle capacità di programmazione del modello, ma si estendono anche al miglioramento del ragionamento per problemi complessi, specialmente quelli che richiedono il \textit{chain-of-thought} (CoT) prompting.
+
+Il concetto di diversità si applica anche alla \textit{diversità linguistica}. Molti LLM sono addestrati su dati multilingue, permettendo di gestire più lingue con un singolo modello. Sebbene questo approccio mostri forti capacità in compiti multilingue e cross-lingua, le prestazioni su lingue specifiche dipendono fortemente dal volume e dalla qualità dei dati disponibili per tali lingue. In alcuni casi, questo porta a risultati scarsi per le lingue a basse risorse (low-resource languages).
+
+Un terzo problema è il \textbf{bias (pregiudizio) nei dati di addestramento}. Questo problema non è unico per gli LLM ma esiste in molti sistemi NLP.
+\begin{definition}{Bias nei Dati di Addestramento}
+Il bias dei dati si riferisce alla presenza di preferenze ingiustificate o stereotipi all'interno dei corpora di addestramento. Un esempio comune è il bias di genere, in cui il termine "infermiera" (nurse) viene associato sproporzionatamente alle donne all'interno dei testi storici.
+\end{definition}
+Per mitigare (debias) questo problema, una pratica comune è bilanciare la rappresentazione di diverse categorie demografiche, come genere, etnia e dialetti. Il bias nei dati è intrinsecamente legato al problema della diversità discusso in precedenza. Poiché molti LLM sono addestrati e allineati su dati incentrati sull'inglese (English-centric data), tendono intrinsecamente a propendere verso i valori culturali e le prospettive prevalenti tra le popolazioni anglofone. Aumentare la diversità linguistica e culturale nei dati di addestramento può mitigare parzialmente questi bias.
+
+Un altro problema nella raccolta di dati su larga scala è la \textbf{privacy}. L'addestramento di LLM su fonti estensive comporta rischi legati all'esposizione di informazioni sensibili, come proprietà intellettuale e dati personali.
+\textbf{Esempio esplicativo:} La capacità degli LLM di rappresentare pattern dai dati su cui sono addestrati potrebbe inavvertitamente portare alla memorizzazione e riproduzione di dettagli specifici e sensibili.
+Un approccio semplice alla protezione della privacy consiste nel rimuovere o anonimizzare le informazioni sensibili. Tecniche di anonimizzazione possono essere applicate per rimuovere le informazioni di identificazione personale dai dati di addestramento per impedire agli LLM di apprenderle. Tuttavia, nella pratica, cancellare o oscurare tutti i dati sensibili è difficile. Pertanto, molti LLM operano insieme a sistemi in grado di rilevare la potenziale esposizione di dati sensibili, o vengono affinati per rifiutare certe richieste che potrebbero portare a fughe di informazioni.
+
+\subsection{Model Modifications (Modifiche al Modello)}
+L'addestramento degli LLM è sfidante. Un problema comunemente incontrato è che il processo di ottimizzazione diventa sempre più instabile man mano che i modelli aumentano di dimensioni. Ad esempio, è necessario scegliere un tasso di apprendimento (learning rate) piccolo per ottenere un addestramento stabile con la discesa del gradiente, ma ciò aumenta drasticamente i tempi di addestramento. A volte, anche quando le configurazioni di addestramento sono accuratamente progettate, il processo può divergere in certi punti dell'ottimizzazione. In questa sezione, ci concentriamo sulle modifiche comuni e sui miglioramenti all'architettura standard del Transformer, che sono importanti per un addestramento stabile degli LLM.
+
+\subsubsection{Layer Normalization with Residual Connections (Normalizzazione dei Layer con Connessioni Residue)}
+La normalizzazione dei layer (layer normalization) viene utilizzata per stabilizzare l'addestramento delle reti neurali profonde. Consiste in un processo che sottrae la media e divide per la deviazione standard. Normalizzando l'output del layer in questo modo, si può efficacemente mitigare il \textit{covariate shift} interno e migliorare la stabilità dell'addestramento.
+
+Nei Transformer, la normalizzazione dei layer è tipicamente impiegata insieme alle connessioni residue. Un sub-layer può basarsi su due architetture:
+\begin{itemize}
+\item \textbf{Post-norm}: La normalizzazione dei layer viene eseguita subito dopo un blocco residuo.
+\item \textbf{Pre-norm}: La normalizzazione dei layer viene eseguita all'interno di un blocco residuo, prima della trasformazione. Questo si esprime come:
+
+
+$$output = F(LNorm(input)) + input$$
+
+
+\end{itemize}
+L'architettura \textit{pre-norm} si è dimostrata particolarmente utile per l'addestramento di Transformer profondi, e pertanto la maggior parte degli LLM si basa su questa architettura.
+
+Una forma ampiamente utilizzata per la funzione di layer normalization è data da:
+
+
+$$LNorm(h) = \alpha \odot \frac{h - \mu}{\sigma + \epsilon} + \beta$$
+
+
+dove $h$ è un vettore reale a $d$ dimensioni, $\mu$ è la media di tutte le entrate di $h$, e $\sigma$ è la corrispondente deviazione standard. Il parametro $\epsilon$ è introdotto per questioni di stabilità numerica. I parametri $\alpha \in \mathbb{R}^d$ e $\beta \in \mathbb{R}^d$ sono i termini di guadagno (gain) e bias.
+
+Una variante della layer normalization, chiamata \textbf{Root Mean Square (RMS) layer normalization}, scala solamente il vettore di input senza ricentrarlo:
+
+
+$$RMSNorm(h) = \frac{h}{\sigma_{rms} + \epsilon} \odot \alpha$$
+
+
+dove $\sigma_{rms}$ è la radice quadrata media di $h$, definita come $\sigma_{rms} = \left( \frac{1}{d} \sum_{k=1}^d h_k^2 \right)^{\frac{1}{2}}$. Questa funzione di layer normalization è utilizzata in LLM come la serie LLaMA.
+
+\subsubsection{Activation Functions in FFNs (Funzioni di Attivazione nei FFN)}
+Nei Transformer, i sub-layer Feed-Forward Network (FFN) sono progettati per introdurre non-linearità nell'apprendimento delle rappresentazioni, e si sono dimostrati utili per prevenire la degenerazione delle rappresentazioni apprese dalla self-attention. La forma standard del FFN utilizzato in questi sub-layer può essere espressa come:
+
+
+$$FFN(h) = \sigma(hW_h + b_h)W_f + b_f$$
+
+
+dove $W_h \in \mathbb{R}^{d \times d_h}$, $b_h \in \mathbb{R}^{d_h}$, $W_f \in \mathbb{R}^{d_h \times d}$, e $b_f \in \mathbb{R}^d$ sono i parametri, e $d_h$ è la dimensione nascosta (hidden size). La funzione $\sigma(\cdot)$ è la funzione di attivazione del layer nascosto. Una scelta comune per $\sigma(\cdot)$ è la Rectified Linear Unit (ReLU), data da:
+
+
+$$\sigma_{relu}(h) = \max(0, h)$$
+
+
+Nelle implementazioni pratiche, aumentare $d_h$ è vantaggioso, quindi negli LLM viene tipicamente impostato a un numero molto più grande di $d$. Tuttavia, una dimensione nascosta eccessivamente grande crea problemi sia in fase di addestramento che di rilascio. In questi casi, la scelta della funzione di attivazione gioca un ruolo più importante per FFN ampi.
+
+Diverse alternative efficaci alla ReLU sono state proposte nei moderni LLM. Una delle più utilizzate è la \textbf{Gaussian Error Linear Unit (GeLU)}, che può essere vista come un'approssimazione liscia della ReLU. Invece di applicare una soglia netta basata sul segno dell'input, la funzione GeLU pesa ogni input mediante la funzione di ripartizione di una distribuzione normale standard. Nello specifico, la funzione GeLU è definita element-wise come:
+
+
+$$\sigma_{gelu}(h) = h \odot \Phi(h)$$
+
+
+dove $\Phi(\cdot)$ indica la funzione di ripartizione della distribuzione normale standard $\mathcal{N}(0,1)$. La funzione GeLU è stata adottata in diversi LLM, come BERT, GPT-3 e BLOOM.
+
+Un'altra popolare famiglia di funzioni di attivazione è la \textbf{Gated Linear Unit (GLU)}. La forma base delle GLU è data da:
+
+
+$$\sigma_{glu}(h) = \sigma(hW_1 + b_1) \odot (hW_2 + b_2)$$
+
+
+dove $W_1, W_2 \in \mathbb{R}^{d \times d_h}$ e $b_1, b_2 \in \mathbb{R}^{d_h}$ sono parametri del modello. Il meccanismo GLU sostituisce efficacemente il singolo passaggio di proiezione lineare e attivazione in un FFN standard, mappando l'input $h$ direttamente nella dimensione nascosta espansa $d_h$. Scelte diverse per l'attivazione sottostante $\sigma(\cdot)$ producono diverse varianti della GLU.
+\begin{itemize}
+\item \textbf{GeGLU}: Se $\sigma(\cdot)$ è definita come la funzione GeLU, si ottiene:
+
+
+$$\sigma_{geglu}(h) = \sigma_{gelu}(hW_1 + b_1) \odot (hW_2 + b_2)$$
+
+
+Questa funzione è stata applicata con successo in LLM come Gemma.
+\item \textbf{SwiGLU}: Se definiamo $\sigma(\cdot)$ come la funzione Swish, $\sigma_{swish}(h) = h \cdot \text{Sigmoid}(\beta h)$, arriviamo alla funzione SwiGLU:
+
+
+$$\sigma_{swiglu}(h) = \sigma_{swish}(hW_1 + b_1) \odot (hW_2 + b_2)$$
+
+
+Sia la serie di modelli PaLM che LLaMA si affidano alla funzione SwiGLU per i loro layer FFN.
+\end{itemize}
+
+\subsubsection{Removing Bias Terms (Rimozione dei Termini di Bias)}
+Un altro popolare design del modello consiste nel rimuovere i termini di bias dalle trasformazioni affini utilizzate negli LLM. Questa semplificazione può essere applicata alla layer normalization, alle proiezioni di input per l'attenzione QKV e ai sub-layer FFN. Ad esempio, possiamo modificare l'equazione per ottenere un FFN senza termini di bias:
+
+
+$$FFN(h) = (hW_h)W_f$$
+
+
+La rimozione dei termini di bias aiuta a migliorare la stabilità dell'addestramento degli LLM. Questo metodo è stato utilizzato in diversi LLM, come LLaMA e Gemma.
+
+\subsubsection{Other Issues (Altre Problematiche)}
+Molti LLM includono anche modifiche ai loro modelli di embedding posizionale. Ad esempio, si possono sostituire le codifiche posizionali sinusoidali con i \textit{rotary position embeddings}. La stabilità dell'addestramento può essere migliorata in molti modi diversi. Ad esempio, aumentare la dimensione del batch (batch size) man mano che procede l'addestramento si è dimostrato utile per alcuni LLM. In generale, ottenere un addestramento stabile ed efficiente su larga scala richiede configurazioni attentamente progettate, come la programmazione del learning rate, la scelta dell'ottimizzatore, le strategie di addestramento parallelo e i metodi di \textit{mixed-precision training}.
+
+\subsection{Distributed Training (Addestramento Distribuito)}
+L'addestramento degli LLM richiede risorse computazionali significative. Un approccio comune per migliorare l'efficienza è l'uso di sistemi distribuiti su larga scala. Tuttavia, scalare l'addestramento degli LLM è ancora una sfida, e richiede sforzi notevoli per sviluppare sistemi hardware e software per un addestramento distribuito stabile ed efficiente.
+Una considerazione importante nell'addestramento distribuito è il parallelismo. Esistono diverse forme di parallelismo: parallelismo dei dati, parallelismo del modello, parallelismo dei tensori e parallelismo di pipeline. Nonostante i diversi modi per distribuire i calcoli tra i dispositivi, questi metodi di parallelismo si basano su un'idea simile: il problema dell'addestramento può essere diviso in compiti più piccoli che possono essere eseguiti simultaneamente:
+
+\begin{definition}{Data Parallelism (Parallelismo dei Dati)}
+È uno dei metodi di parallelismo più ampiamente utilizzati per l'addestramento delle reti neurali. Per illustrarlo, consideriamo il caso più semplice in cui viene utilizzata la regola delta standard nella discesa del gradiente:
+
+
+$$\theta_{t+1} = \theta_t - \eta \frac{\partial \mathcal{L}_{\theta_t}(\mathcal{D}_{mini})}{\partial \theta_t}$$
+
+
+dove i nuovi parametri $\theta_{t+1}$ si ottengono aggiornando gli ultimi parametri $\theta_t$ con un piccolo step $\eta$ nella direzione del gradiente di perdita negativo calcolato sul minibatch $\mathcal{D}_{mini}$. Nel parallelismo dei dati, si divide $\mathcal{D}_{mini}$ in $N$ batch più piccoli, $\{ \mathcal{D}^1, \dots, \mathcal{D}^N \}$, e li si distribuisce a $N$ worker. Il gradiente dell'intero minibatch è ottenuto aggregando i gradienti calcolati dai worker:
+
+
+$$\frac{\partial \mathcal{L}_{\theta_t}(\mathcal{D}_{mini})}{\partial \theta_t} = \underbrace{\frac{\partial \mathcal{L}_{\theta_t}(\mathcal{D}^1)}{\partial \theta_t}}_{\text{worker } 1} + \underbrace{\frac{\partial \mathcal{L}_{\theta_t}(\mathcal{D}^2)}{\partial \theta_t}}_{\text{worker } 2} + \dots + \underbrace{\frac{\partial \mathcal{L}_{\theta_t}(\mathcal{D}^N)}{\partial \theta_t}}_{\text{worker } N}$$
+
+
+In condizioni ideali, si può ottenere un'accelerazione dell'addestramento di quasi un fattore $N$.
+\end{definition}
+
+\begin{definition}{Model Parallelism (Parallelismo del Modello)}
+Man mano che gli LLM diventano più grandi, a volte diventa irrealizzabile caricare ed eseguire un LLM su un singolo dispositivo. In questo caso, possiamo disaccoppiare l'LLM in componenti più piccoli ed eseguirli su dispositivi differenti. Nel \textit{naive model parallelism}, si raggruppano i layer consecutivi nello stack e ogni gruppo viene assegnato a un worker. I worker operano sequenzialmente seguendo l'ordine dei layer; nel passaggio in avanti (forward pass) si processa l'input dai layer inferiori ai superiori, e nel passaggio all'indietro (backward pass) si propagano i gradienti di errore dai layer superiori agli inferiori. Questo metodo costringe i worker a funzionare in sequenza, per cui un worker deve attendere che il precedente termini il proprio lavoro, lasciando i dispositivi inattivi per la maggior parte del tempo.
+\end{definition}
+
+\begin{definition}{Tensor Parallelism (Parallelismo dei Tensori)}
+Il parallelismo può anche essere eseguito in un singolo passaggio computazionale. Un approccio comune è dividere una grande matrice di parametri in sotto-blocchi (chunks), moltiplicare il tensore di input con ogni chunk separatamente, e poi concatenare i risultati. Ad esempio, considerando la moltiplicazione della rappresentazione $h \in \mathbb{R}^d$ con la matrice $W_h \in \mathbb{R}^{d \times d_h}$ in un FFN, possiamo affettare la matrice $W_h$ verticalmente in $M$ sottomatrici:
+
+
+$$W_h = [W_h^1 \quad W_h^2 \quad \dots \quad W_h^M]$$
+
+
+La moltiplicazione diventa:
+
+
+$$hW_h = h [W_h^1 \quad W_h^2 \quad \dots \quad W_h^M] = [hW_h^1 \quad hW_h^2 \quad \dots \quad hW_h^M]$$
+
+
+Possiamo eseguire le moltiplicazioni di matrici su $M$ dispositivi separatamente, distribuendo così una grande moltiplicazione di matrici su più dispositivi, ognuno dei quali può avere una memoria relativamente piccola.
+\end{definition}
+
+\begin{definition}{Pipeline Parallelism (Parallelismo di Pipeline)}
+Per risolvere l'inefficienza del parallelismo del modello, il parallelismo di pipeline introduce sovrapposizioni tra le computazioni su dispositivi diversi. Un batch di campioni viene diviso in un numero di micro-batch. Non appena un worker elabora un micro-batch e lo passa al successivo, il micro-batch seguente prende immediatamente il suo posto sullo stesso worker. Idealmente, si vorrebbe massimizzare il numero di micro-batch, riducendo al minimo il tempo di inattività dei worker. Tuttavia, l'uso di micro-batch piccoli spesso riduce l'utilizzo della GPU e aumenta i costi di cambio contesto (task-switching).
+\end{definition}
+
+\begin{observation}
+L'obiettivo finale dell'elaborazione parallela è ottenere una crescita lineare dell'efficienza, ma l'addestramento distribuito è complicato dai costi di comunicazione. I risparmi di tempo dovuti al parallelismo possono essere annullati dall'overhead di comunicazione di una rete estesa. Inoltre, la sincronizzazione dei nodi introduce costi aggiuntivi poiché alcuni nodi potrebbero impiegare più tempo per completare i propri compiti. Sebbene l'addestramento asincrono possa gestire l'eterogeneità computazionale, può portare a gradienti obsoleti (stale gradients) e a una convergenza non garantita. All'aumentare dei nodi, vi è anche una maggiore probabilità di incontrare nodi guasti, richiedendo che l'intero sistema sia tollerante ai guasti (fault-tolerant).
+\end{observation}
+
+Per migliorare l'efficienza dell'addestramento, i ricercatori impiegano anche metodi di compressione e velocizzazione, come il \textbf{mixed precision training}. In questo approccio, dati a bassa precisione (come FP16 e FP8) vengono utilizzati per il calcolo dei gradienti su ogni nodo, mentre dati a precisione superiore (es. FP32/FP64) vengono utilizzati per l'aggiornamento del modello.
+\textbf{Esempio esplicativo:} Un'operazione chiave in questo approccio è l'accumulo dei gradienti, che richiede la sincronizzazione tra i nodi. A causa della non-associatività dell'addizione in virgola mobile, ciò può portare a leggere differenze numeriche nei gradienti accumulati, che possono influenzare la convergenza e le prestazioni finali. Questo problema è accentuato dal fatto che i calcoli a bassa precisione possono incontrare problemi di overflow e underflow, richiedendo che la progettazione di sistemi distribuiti tenga conto di queste questioni numeriche.
+
