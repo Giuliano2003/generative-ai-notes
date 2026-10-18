@@ -332,6 +332,7 @@ Nelle implementazioni moderne si preferisce talvolta la variante \textbf{Pre-Nor
 \begin{equation}
 Z = Y(X') + X, \quad \text{con } X' = \text{LayerNorm}[X] \label{eq:pre_norm}
 \end{equation}
+\textbf{Si chiama Pre-Norm}, perchè la normalizzazione avviene prima del layer di attenzione.
 La configurazione Pre-Norm facilita un'ottimizzazione più stabile nelle fasi iniziali dell'addestramento. In entrambi i casi, la matrice intermedia $Z$ mantiene la dimensionalità $N \times D$.
 
 \subsection{Il Ruolo della Rete Non Lineare MLP}

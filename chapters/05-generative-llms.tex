@@ -1519,6 +1519,7 @@ Nella modalità \textbf{Few-shot CoT}, invece di fornire solo la coppia problema
 Nella modalità \textbf{Zero-shot CoT}, sfruttando una scoperta empirica ormai radicata nella comunità scientifica, si accoda dinamicamente un innesco linguistico fisso al prompt (una frase "trigger" del tipo: \textit{"Let's think step by step."}). Questa singola aggiunta altera la probabilità della distribuzione autoregressiva del modello a tal punto da obbligarlo a spacchettare il problema in ragionamenti indipendenti, permettendogli di giungere ad esiti logicamente corretti senza aver ricevuto nessun esempio formale precedente.
 \section{Training at Scale (Addestramento su Larga Scala)}
 Come primo passo nello sviluppo dei Large Language Models (LLM), è necessario addestrare questi modelli su grandi quantità di dati. Il compito di addestramento è standard: l'obiettivo è massimizzare la log-verosimiglianza (log-likelihood), il che può essere ottenuto tramite la discesa del gradiente (gradient descent). Tuttavia, quando si aumenta la scala sia della dimensione del modello sia della quantità di dati, il problema di ottimizzazione diventa altamente sfidante. Ad esempio, i modelli di grandi dimensioni rendono generalmente il processo di addestramento instabile. In questa sezione, discuteremo diverse problematiche inerenti all'addestramento su larga scala per gli LLM, tra cui la preparazione dei dati, le modifiche al modello e l'addestramento distribuito.
+Noi fissiamo un numero di epoche, ma un learning rate più basso può richiedere più aggiornamenti dei pesi per raggiungere lo stesso livello di prestazioni
 
 \subsection{Data Preparation (Preparazione dei Dati)}
 L'importanza dei dati non può essere sopravvalutata nel campo del Natural Language Processing (NLP). Con lo sviluppo di reti neurali sempre più grandi, la richiesta di dati continua ad aumentare. Ad esempio, lo sviluppo di LLM può richiedere trilioni di token per il pre-training, ordini di grandezza superiori rispetto a quelli utilizzati per addestrare i modelli NLP convenzionali. In generale, si desidera raccogliere la maggior quantità possibile di dati di addestramento. Tuttavia, dataset più grandi non si traducono automaticamente in risultati migliori, e lo sviluppo degli LLM solleva nuovi problemi nella creazione o raccolta di questi dataset.
@@ -1554,7 +1555,7 @@ Un altro problema nella raccolta di dati su larga scala è la \textbf{privacy}. 
 Un approccio semplice alla protezione della privacy consiste nel rimuovere o anonimizzare le informazioni sensibili. Tecniche di anonimizzazione possono essere applicate per rimuovere le informazioni di identificazione personale dai dati di addestramento per impedire agli LLM di apprenderle. Tuttavia, nella pratica, cancellare o oscurare tutti i dati sensibili è difficile. Pertanto, molti LLM operano insieme a sistemi in grado di rilevare la potenziale esposizione di dati sensibili, o vengono affinati per rifiutare certe richieste che potrebbero portare a fughe di informazioni.
 
 \subsection{Model Modifications (Modifiche al Modello)}
-L'addestramento degli LLM è sfidante. Un problema comunemente incontrato è che il processo di ottimizzazione diventa sempre più instabile man mano che i modelli aumentano di dimensioni. Ad esempio, è necessario scegliere un tasso di apprendimento (learning rate) piccolo per ottenere un addestramento stabile con la discesa del gradiente, ma ciò aumenta drasticamente i tempi di addestramento. A volte, anche quando le configurazioni di addestramento sono accuratamente progettate, il processo può divergere in certi punti dell'ottimizzazione. In questa sezione, ci concentriamo sulle modifiche comuni e sui miglioramenti all'architettura standard del Transformer, che sono importanti per un addestramento stabile degli LLM.
+L'addestramento degli LLM è sfidante. Un problema comunemente incontrato è che il processo di ottimizzazione diventa sempre più instabile man mano che i modelli aumentano di dimensioni. Ad esempio, è necessario scegliere un tasso di apprendimento (learning rate) piccolo per ottenere un addestramento stabile con la discesa del gradiente, ma ciò aumenta drasticamente i tempi di addestramento. A volte, anche quando le configurazioni di addestramento sono accuratamente progettate, il processo può divergere in certi punti dell'ottimizzazione. \textbf{In questa sezione, ci concentriamo sulle modifiche comuni e sui miglioramenti all'architettura standard del Transformer, che sono importanti per un addestramento stabile degli LLM}.
 
 \subsubsection{Layer Normalization with Residual Connections (Normalizzazione dei Layer con Connessioni Residue)}
 La normalizzazione dei layer (layer normalization) viene utilizzata per stabilizzare l'addestramento delle reti neurali profonde. Consiste in un processo che sottrae la media e divide per la deviazione standard. Normalizzando l'output del layer in questo modo, si può efficacemente mitigare il \textit{covariate shift} interno e migliorare la stabilità dell'addestramento.
@@ -1588,13 +1589,13 @@ $$RMSNorm(h) = \frac{h}{\sigma_{rms} + \epsilon} \odot \alpha$$
 dove $\sigma_{rms}$ è la radice quadrata media di $h$, definita come $\sigma_{rms} = \left( \frac{1}{d} \sum_{k=1}^d h_k^2 \right)^{\frac{1}{2}}$. Questa funzione di layer normalization è utilizzata in LLM come la serie LLaMA.
 
 \subsubsection{Activation Functions in FFNs (Funzioni di Attivazione nei FFN)}
-Nei Transformer, i sub-layer Feed-Forward Network (FFN) sono progettati per introdurre non-linearità nell'apprendimento delle rappresentazioni, e si sono dimostrati utili per prevenire la degenerazione delle rappresentazioni apprese dalla self-attention. La forma standard del FFN utilizzato in questi sub-layer può essere espressa come:
-
+Nei Transformer standard, i sub-layer Feed-Forward Network (FFN) (o le MLP, indicano lo stesso componente) sono progettati per introdurre non-linearità nell'apprendimento delle rappresentazioni, e si sono dimostrati utili per prevenire la degenerazione delle rappresentazioni apprese dalla self-attention. La forma standard del FFN utilizzato in questi sub-layer può essere espressa come:
+(in questo esempio $h$ si va vedere come se fosse un vettore, in realtà nel contesto reale è la matrice $Z$ che esce fuori dal processo di attenzione e post (o pre) norm)
 
 $$FFN(h) = \sigma(hW_h + b_h)W_f + b_f$$
 
 
-dove $W_h \in \mathbb{R}^{d \times d_h}$, $b_h \in \mathbb{R}^{d_h}$, $W_f \in \mathbb{R}^{d_h \times d}$, e $b_f \in \mathbb{R}^d$ sono i parametri, e $d_h$ è la dimensione nascosta (hidden size). La funzione $\sigma(\cdot)$ è la funzione di attivazione del layer nascosto. Una scelta comune per $\sigma(\cdot)$ è la Rectified Linear Unit (ReLU), data da:
+dove $W_h \in \mathbb{R}^{d \times d_h}$ (\textbf{Matrice che viene introdotta per espandere la dimensione di $h$}), $b_h \in \mathbb{R}^{d_h}$, $W_f \in \mathbb{R}^{d_h \times d}$, e $b_f \in \mathbb{R}^d$ sono i parametri, e $d_h$ è la dimensione nascosta (hidden size). La funzione $\sigma(\cdot)$ è la funzione di attivazione del layer nascosto. Una scelta comune per $\sigma(\cdot)$ è la Rectified Linear Unit (ReLU), data da:
 
 
 $$\sigma_{relu}(h) = \max(0, h)$$
@@ -1697,3 +1698,153 @@ L'obiettivo finale dell'elaborazione parallela è ottenere una crescita lineare 
 Per migliorare l'efficienza dell'addestramento, i ricercatori impiegano anche metodi di compressione e velocizzazione, come il \textbf{mixed precision training}. In questo approccio, dati a bassa precisione (come FP16 e FP8) vengono utilizzati per il calcolo dei gradienti su ogni nodo, mentre dati a precisione superiore (es. FP32/FP64) vengono utilizzati per l'aggiornamento del modello.
 \textbf{Esempio esplicativo:} Un'operazione chiave in questo approccio è l'accumulo dei gradienti, che richiede la sincronizzazione tra i nodi. A causa della non-associatività dell'addizione in virgola mobile, ciò può portare a leggere differenze numeriche nei gradienti accumulati, che possono influenzare la convergenza e le prestazioni finali. Questo problema è accentuato dal fatto che i calcoli a bassa precisione possono incontrare problemi di overflow e underflow, richiedendo che la progettazione di sistemi distribuiti tenga conto di queste questioni numeriche.
 
+\section{Long Sequence Modeling (Modellazione di Sequenze Lunghe)}
+
+Nella fase di addestramento dei modelli di linguaggio di grandi dimensioni (Large Language Models, LLM, qui stiamo parlando piu nello specifico di LLM generativi), è prassi comune utilizzare testi di lunghezza standard. Tuttavia, nelle applicazioni moderne, spesso emerge la necessità di elaborare sequenze che superano ampiamente le lunghezze osservate durante il pre-addestramento.
+(\textbf{Nota che qui stiamo parlando che il nostro modello già è stato pre-allenato su testi di lunghezza standard, e ci si trova nella fase di applicazione/inferenza (o valutazione), in cui si chiede al modello di elaborare o generare sequenze di contesto molto più lunghe rispetto a quelle su cui è stato allenato in origine, inoltre i pesi già sono stati fissati})
+
+Qua usiamo $Pr(y|x)$ viene usato per denotare la probabilità condizionata di generare testo, dove $x$ è il contesto e $y$ è il testo generato.
+In generale, i problemi di modellazione di sequenze lunghe possono essere classificati in tre categorie principali:
+\begin{itemize}
+\item \textbf{Generazione di testo con contesto lungo}: in questo scenario, la sequenza di input $x$ è molto lunga, come nel caso della generazione di un breve riassunto a partire da un documento esteso.
+\item \textbf{Generazione di testo lungo}: la sequenza di output $y$ è lunga, ad esempio quando si richiede la generazione di una storia complessa a partire da poche parole chiave.
+\item \textbf{Generazione di testo lungo con contesto lungo}: sia l'input $x$ che l'output $y$ sono sequenze estese, come nella traduzione di un intero libro da una lingua a un'altra.
+\end{itemize}
+
+Il paragrafo quindi parla di LLM generativi e, più precisamente, di come adattarli a compiti che richiedono la gestione di sequenze di testo molto lunghe.
+
+Recentemente i ricercatori NLP, sono stati molto interessati nell'applicare e valutare LLMs in task, dove sono presenti lunghe sequenze (quindi i task di prima).
+Immagina un LLM decoder-only addestrato prevalentemente su testi relativamente brevi. Vorremmo utilizzarlo per:
+\begin{itemize}
+    \item Descrivere le funzionalità principali di un file sorgente C++ di decine di migliaia di righe;
+    \item riassumere un documento di centinaia di pagine;
+    \item generare una storia molto lunga;
+    \item tradurre un intero documento.
+\end{itemize}
+In questi casi dobbiamo affrontare due problemi distinti:
+\begin{itemize}
+    \item \textbf{Lunghezza del contesto}: il modello deve riuscire a elaborare una grande quantità di token in input.
+    \item \textbf{Lunghezza della generazione:} il modello deve riuscire a produrre una grande quantità di token in output
+\end{itemize}
+Modelli che sono in grado di fare questo, sono tipicamente chiamati \textbf{long-context LLMs}. In questa sezione ci concrenteremo proprio su quest'ultimi, ma i metodi discussi possono essere applicati anche ad altri problemi.
+
+Per transformers, affrontare lunghe sequenze è computazionalmente dispendioso, perchè il costo computazionale della \textbf{self-attention} cresce in modo quadratico con la sequenza di input.
+Se la sequenza di input è grande $N$, la matrice di \textbf{self-attention} attenzione sarà grande $N^2$.
+Questo rende costoso allenare e infierire modelli con input cosi lunghi.
+
+Per affrontare questa limitazione e rendere trattabili le sequenze lunghe, la ricerca si è mossa lungo due direttrici principali:
+\begin{enumerate}
+\item Esplorare metodi di addestramento e architetture efficienti per apprendere in modo efficiente la self-attention da dati contenenti sequenze lunghe.
+\item Adattare LLM già pre-addestrati affinché possano gestire sequenze estese con sforzi di fine-tuning minimi o nulli.
+\end{enumerate}
+
+\subsection{Optimization from an HPC Perspective (Ottimizzazione dalla Prospettiva dell'HPC)}
+
+I miglioramenti ai modelli Transformer standard possono essere analizzati dalla prospettiva del calcolo ad alte prestazioni (*High-Performance Computing*, HPC).
+
+\begin{definition}{Formati a Precisione Ridotta}
+Si tratta di tecniche di ottimizzazione che consistono nell'abbandonare il formato in virgola mobile a 32 bit (FP32) in favore di formati a precisione ridotta come FP16, BF16 o la quantizzazione a interi a 8 bit (INT8). L'utilizzo di questi formati riduce l'occupazione di memoria e incrementa il throughput computazionale, facilitando l'elaborazione di sequenze più lunghe.
+\end{definition}
+
+Oltre all'impiego della precisione ridotta, è possibile ottimizzare i Transformer sfruttando tecniche consapevoli dell'hardware (*hardware-aware*), ad esempio implementando operazioni di auto-attenzione che ottimizzano le operazioni di input/output (IO-aware) sulle GPU.
+
+Un ulteriore e fondamentale approccio per gestire sequenze estese è il \textbf{parallelismo di sequenza}.
+In questo schema, il problema computazionale del calcolo dell'attenzione viene suddiviso assegnando a diversi nodi di calcolo (es. diverse GPU in un cluster) specifici segmenti della sequenza. Nello specifico, considerando la computazione dell'attenzione per una query $q_i$, le matrici delle chiavi ($K$) e dei valori ($V$) vengono suddivise lungo la dimensione della sequenza, ottenendo sottomatrici $\{K^{[1]}, \dots, K^{[n_u]}\}$ e $\{V^{[1]}, \dots, V^{[n_u]}\}$. Ciascuna coppia di sottomatrici viene elaborata parallelamente da un nodo distinto.
+
+L'output del modello di auto-attenzione per la posizione $i$ è definito come:
+\begin{equation}
+Att_{qkv}(q_i, K, V) = \sum_{j=0}^{m-1} \alpha_{i,j} v_j
+\end{equation}
+dove $\alpha_{i,j}$ rappresenta il peso di attenzione tra le posizioni $i$ e $j$. Tale peso viene calcolato normalizzando il prodotto scalare tra $q_i$ e $k_j$. Definendo il punteggio di attenzione grezzo come $\beta_{i,j}$:
+\begin{equation}
+\beta_{i,j} = \frac{q_i \cdot k_j}{\sqrt{d}} + Mask(i,j)
+\end{equation}
+dove $Mask(i,j)$ è la maschera causale, il peso finale $\alpha_{i,j}$ si ottiene applicando la funzione Softmax:
+\begin{equation}
+\alpha_{i,j} = Softmax(\beta_{i,j}) = \frac{\exp(\beta_{i,j})}{\sum_{j'} \exp(\beta_{i,j'})}
+\end{equation}
+
+In un sistema parallelo, calcolare il numeratore $\exp(\beta_{i,j})$ è immediato poiché le informazioni necessarie risiedono localmente nel nodo. Al contrario, il denominatore richiede una somma globale su tutti gli indici $j'$, necessitando il trasferimento di dati tra i nodi. Questa operazione può essere riscritta isolando i contributi dei singoli nodi:
+\begin{equation}
+\alpha_{i,j} = \frac{\exp(\beta_{i,j})}{\underbrace{\sum_{k_{j'} \in K^{[1]}} \exp(\beta_{i,j'})}*{\text{nodo 1}} + \dots + \underbrace{\sum*{k_{j'} \in K^{[u]}} \exp(\beta_{i,j'})}_{\text{nodo u}} + \dots}
+\end{equation}
+dove l'aggregazione di queste somme parziali viene gestita tramite operazioni collettive altamente ottimizzate (come le operazioni \textit{all-reduce}).
+
+Una volta calcolati i pesi $\alpha_{i,j}$, il calcolo dell'output finale viene parallelizzato in modo analogo, sommando i contributi vettoriali pesati provenienti dai diversi nodi:
+\begin{equation}
+Att_{qkv}(q_i, K, V) = \underbrace{\sum_{v_{j'} \in V^{[1]}} \alpha_{i,j'} v_{j'}}*{\text{nodo 1}} + \dots + \underbrace{\sum*{v_{j'} \in V^{[u]}} \alpha_{i,j'} v_{j'}}_{\text{nodo u}} + \dots
+\end{equation}
+
+\subsection{Efficient Architectures (Architetture Efficienti)}
+
+Il principale ostacolo per l'applicazione dei Transformer a sequenze lunghe risiede nella complessità quadratica in tempo e memoria dell'auto-attenzione standard. Inoltre, la generazione autoregressiva richiede il mantenimento di una cache per chiavi e valori (*KV cache*) che cresce linearmente con il numero di token processati, diventando proibitiva per contesti estremamente lunghi. Per questo motivo, sono state sviluppate architetture alternative e varianti più efficienti.
+
+\begin{definition}{Attenzione Sparsa (Sparse Attention)}
+È un'architettura motivata dall'osservazione che, in sequenze lunghe, le distribuzioni di attenzione sono fortemente sbilanciate: solo un piccolo sottoinsieme di token incide significativamente sul contesto di un dato token. Pertanto, si calcolano i pesi solo per un sottoinsieme prefissato di token attivi (definito dall'insieme di indici $G$), forzando a zero tutti gli altri.
+\end{definition}
+
+Formalmente, l'output di un modello di attenzione sparsa alla posizione $i$ è definito come:
+\begin{equation}
+Att_{sparse}(q_i, K_{\le i}, V_{\le i}) = \sum_{j \in G} \alpha'*{i,j} v_j
+\end{equation}
+dove i pesi $\alpha'*{i,j}$ sono normalizzati esclusivamente sugli elementi appartenenti all'insieme $G$, assumendo pertanto valori differenti (e maggiori) rispetto ai pesi di attenzione originali. Un tipico approccio per definire $G$ è l'impiego di una finestra locale intorno alla posizione $i$.
+
+Sebbene l'attenzione sparsa riduca il carico computazionale, necessita comunque di memorizzare l'intera KV cache. Per ovviare a questo problema di memoria, sono state introdotte metodologie che non conservano esplicitamente la cache, come l'attenzione lineare (*Linear Attention*).
+L'attenzione lineare impiega una funzione kernel $\phi(\cdot)$ per proiettare query e chiavi in un nuovo spazio delle feature ($q'_i = \phi(q_i)$ e $k'_i = \phi(k_i)$) e sostituisce la normalizzazione Softmax con una formulazione lineare:
+\begin{equation}
+Att_{linear}(q'*i, K'*{\le i}, V_{\le i}) = \frac{q'_i \mu_i}{q'i \nu_i}
+\end{equation}
+dove i termini $\mu_i$ e $\nu_i$ fungono da riassunti ricorrenti della storia passata fino alla posizione $i$ e vengono aggiornati progressivamente come:
+\begin{equation}
+\mu_i = \mu{i-1} + {k'*i}^\top v_i
+\end{equation}
+\begin{equation}
+\nu_i = \nu*{i-1} + {k'_i}^\top
+\end{equation}
+In questo modo, il costo computazionale e di memoria ad ogni passo diventa costante, favorendo l'estensione a sequenze molto lunghe.
+
+Questo principio di aggiornamento sequenziale è naturalmente insito nei modelli ricorrenti, i quali leggono i token singolarmente e aggiornano uno stato interno di dimensione fissa, senza la necessità di accedere a tutti gli stati pregressi.
+
+\begin{observation}
+Nonostante l'architettura Transformer abbia dominato il campo degli LLM, le architetture ricorrenti (come i moderni \textit{state space models}, es. Mamba) stanno riscontrando un rinnovato interesse proprio per la loro efficienza intrinseca nella gestione di contesti estesi, ponendosi come promettenti alternative ai Transformer classici.
+\end{observation}
+
+\subsection{Cache and Memory (Cache e Memoria)}
+
+I modelli LLM basati su Transformer standard impiegano meccanismi di attenzione globale densa che, durante l'inferenza autoregressiva, richiedono il salvataggio in memoria delle rappresentazioni di tutti i token precedenti (KV cache). Poiché l'ingombro di tale memoria diventa impraticabile per testi prolissi, per superare questo collo di bottiglia la ricerca ha introdotto l'uso di moduli di memoria ausiliaria che codificano e comprimono il contesto. Queste soluzioni si dividono ampiamente in memorie interne di dimensione fissa (come finestre scorrevoli, medie mobili o memorie ricorrenti) e memorie esterne che archiviano vettori ricercabili tramite algoritmi efficienti di recupero (*k-Nearest Neighbors* o framework *RAG*).
+
+\subsection{Position Extrapolation and Interpolation (Estrapolazione e Interpolazione della Posizione)}
+
+L'assenza intrinseca della nozione di ordine nell'architettura Transformer richiede l'utilizzo di embedding posizionali. Quando un modello addestrato su sequenze di lunghezza massima $m_l$ viene impiegato durante l'inferenza su sequenze molto più lunghe ($m \gg m_l$), gli embedding posizionali tradizionali falliscono poiché non hanno mai osservato le nuove posizioni. Per far fronte a questa discrepanza, si adottano due tecniche principali di generalizzazione: l'estrapolazione, in cui il modello deduce valori coerenti estendendo matematicamente le sue funzioni oltre il dominio addestrato, e l'interpolazione, in cui l'intervallo esteso delle posizioni $[0, m]$ viene scalato e compresso (ad esempio tramite trasformazioni lineari) per rientrare nel dominio di addestramento originale $[0, m_l]$.
+
+\subsection{Remarks (Osservazioni Conclusive)}
+
+\subsubsection{Need for Long Context (Necessità di Contesti Lunghi)}
+
+Uno degli obiettivi primari degli LLM per contesti lunghi è l'acquisizione della capacità di codificare contesti infiniti, ossia gestire flussi continui di token in arrivo. Questo ha stimolato la creazione di modelli con memoria a dimensione fissa o con meccanismi di attenzione nello spazio continuo per annullare la dipendenza dalla lunghezza del testo.
+
+Tuttavia, queste esplorazioni sollevano importanti interrogativi teorici: è davvero possibile comprimere la rappresentazione di un contesto infinito in un modello ridotto? E tutti i token contestuali sono realmente necessari per la predizione futura?. Sebbene non esista una risposta definitiva, tali interrogativi hanno portato alla concezione degli LLM come "potenti compressori in-context". Inoltre, il fabbisogno reale di contesti lunghi dipende fortemente dal compito specifico: in un riassunto potrebbe essere sufficiente focalizzarsi su pochissimi concetti chiave, mentre nei compiti di recupero di informazioni (IR) è imperativo che il modello memorizzi fedelmente l'intera sequenza per accedere a dettagli remoti.
+
+\subsubsection{Pre-training or Adapting LLMs? (Pre-addestramento o Adattamento degli LLM?)}
+
+Addestrare da zero un LLM su dataset composti esclusivamente da sequenze estremamente lunghe è proibitivo a causa dei costi computazionali smisurati. Di conseguenza, la prassi standard consiste nel pre-addestrare il modello su testi di lunghezza convenzionale e successivamente adattarlo a contesti estesi tramite un modesto sforzo di fine-tuning.
+
+\begin{observation}
+Quando si implementano nuove architetture (ad esempio, per ottimizzare specificamente le prestazioni su contesti lunghi), si è spesso costretti a pre-addestrare il modello da zero. Questo rappresenta una limitazione pratica non trascurabile.
+\end{observation}
+
+Un compromesso efficace consiste nell'adottare architetture ibride durante la fase di fine-tuning. Ad esempio, è possibile utilizzare un LLM pre-addestrato con attenzione densa (globale) e convertirlo per utilizzare attenzione sparsa durante il fine-tuning, sfruttando i pesi pre-addestrati come punto di partenza. Altri adattamenti includono l'integrazione di moduli di memoria esterna a un LLM statico, come accade nel framework RAG.
+
+\subsubsection{Evaluating Long-context LLMs (Valutazione degli LLM per Contesti Lunghi)}
+
+Valutare rigorosamente le prestazioni degli LLM su contesti lunghi è un problema relativamente nuovo e privo di standard universali. Metriche classiche, come la perplessità (*perplexity*), risultano inadeguate poiché tendono a misurare la capacità del modello di sfruttare il contesto locale anziché quello globale.
+
+Per misurare l'effettiva capacità di un LLM di recuperare e comprendere dettagli immersi in grandi quantità di testo, la ricerca ha ideato task sintetici specifici:
+\begin{itemize}
+\item \textbf{Needle-in-a-haystack / Passkey retrieval}: All'LLM viene richiesto di identificare ed estrarre un frammento di informazione specifico e minuscolo nascosto in un volume di testo molto ampio e irrilevante.
+\item \textbf{Copy memory tasks}: Si richiede al modello di memorizzare e ripetere con precisione l'intero testo di input o uno specifico segmento dopo un lungo intervallo.
+\end{itemize}
+
+Oltre ai task sintetici, si ricorre a compiti NLP applicati su testi reali e corposi, come il riassunto multi-documento, il completamento di codice o il *question answering* su documenti estesi, per allineare la valutazione alle aspettative dell'utente finale.
+
+Nonostante i numerosi metodi proposti, permangono notevoli sfide. Molti test sintetici valutano capacità meccaniche di recupero dell'informazione, che non implicano necessariamente una reale e profonda "comprensione" logica dell'intero contesto da parte del modello. Inoltre, i risultati sono altamente sensibili al formato del prompt, creando discrepanze tra le prestazioni valutate in ambienti sintetici e i reali contesti applicativi. La valutazione olistica degli LLM su sequenze lunghe rimane, pertanto, un'area di ricerca aperta e critica.
