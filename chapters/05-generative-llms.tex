@@ -1853,39 +1853,39 @@ e con il nodo 2 si aggiunge:
 \begin{equation}
     y_1 = a_{1,1} v_1 + a_{1,2} v2 + a_{1,3} v_3 + a_{1,4} v_4 
 \end{equation}
+
+
 \subsection{Efficient Architectures (Architetture Efficienti)}
 
-Il principale ostacolo per l'applicazione dei Transformer a sequenze lunghe risiede nella complessità quadratica in tempo e memoria dell'auto-attenzione standard. Inoltre, la generazione autoregressiva richiede il mantenimento di una cache per chiavi e valori (*KV cache*) che cresce linearmente con il numero di token processati, diventando proibitiva per contesti estremamente lunghi. Per questo motivo, sono state sviluppate architetture alternative e varianti più efficienti.
+Una difficoltà nell'applicare i Transformers a lunghe sequenze è che la \textit{self-attention} standard soffre di una complessità quadratica di tempo e memoria rispetto alla lunghezza della sequenza. Inoltre, la generazione autoregressiva richiede il mantenimento di una \textbf{key-value cache} (o \textbf{KV cache}), la cui dimensione aumenta man mano che vengono elaborati più token. Sebbene l'impronta della KV cache cresca linearmente con la lunghezza della sequenza, per contesti estremamente lunghi, questo requisito di memoria diventa proibitivo, rendendo impraticabile il \textit{deployment} degli LLM standard. Di conseguenza, l'architettura dei modelli degli LLM a contesto lungo generalmente si allontana dal Transformer standard, orientandosi invece verso lo sviluppo di varianti e alternative più efficienti.
 
-\begin{definition}{Attenzione Sparsa (Sparse Attention)}
-È un'architettura motivata dall'osservazione che, in sequenze lunghe, le distribuzioni di attenzione sono fortemente sbilanciate: solo un piccolo sottoinsieme di token incide significativamente sul contesto di un dato token. Pertanto, si calcolano i pesi solo per un sottoinsieme prefissato di token attivi (definito dall'insieme di indici $G$), forzando a zero tutti gli altri.
-\end{definition}
+Un approccio consiste nel sostituire la \textit{self-attention} standard con la \textit{sparse attention}. Questa famiglia di modelli è motivata dall'osservazione che le distribuzioni di \textit{attention} nelle sequenze lunghe sono spesso altamente asimmetriche (\textit{skewed}). Pertanto, solo un piccolo sottoinsieme di token impatta in modo significativo sul contesto di un qualsiasi token dato. Di conseguenza, possiamo potare (\textit{prune}) la stragrande maggioranza dei pesi di \textit{attention}, rappresentando il meccanismo in una forma altamente compressa. Per illustrare ciò, consideriamo la formulazione standard della \textit{self-attention}:
 
-Formalmente, l'output di un modello di attenzione sparsa alla posizione $i$ è definito come:
 \begin{equation}
-Att_{sparse}(q_i, K_{\le i}, V_{\le i}) = \sum_{j \in G} \alpha'*{i,j} v_j
+    \text{Att}_{\text{qkv}}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \alpha(\mathbf{Q}, \mathbf{K})\mathbf{V},
 \end{equation}
-dove i pesi $\alpha'*{i,j}$ sono normalizzati esclusivamente sugli elementi appartenenti all'insieme $G$, assumendo pertanto valori differenti (e maggiori) rispetto ai pesi di attenzione originali. Un tipico approccio per definire $G$ è l'impiego di una finestra locale intorno alla posizione $i$.
 
-Sebbene l'attenzione sparsa riduca il carico computazionale, necessita comunque di memorizzare l'intera KV cache. Per ovviare a questo problema di memoria, sono state introdotte metodologie che non conservano esplicitamente la cache, come l'attenzione lineare (*Linear Attention*).
-L'attenzione lineare impiega una funzione kernel $\phi(\cdot)$ per proiettare query e chiavi in un nuovo spazio delle feature ($q'_i = \phi(q_i)$ e $k'_i = \phi(k_i)$) e sostituisce la normalizzazione Softmax con una formulazione lineare:
-\begin{equation}
-Att_{linear}(q'*i, K'*{\le i}, V_{\le i}) = \frac{q'_i \mu_i}{q'i \nu_i}
-\end{equation}
-dove i termini $\mu_i$ e $\nu_i$ fungono da riassunti ricorrenti della storia passata fino alla posizione $i$ e vengono aggiornati progressivamente come:
-\begin{equation}
-\mu_i = \mu{i-1} + {k'*i}^\top v_i
-\end{equation}
-\begin{equation}
-\nu_i = \nu*{i-1} + {k'_i}^\top
-\end{equation}
-In questo modo, il costo computazionale e di memoria ad ogni passo diventa costante, favorendo l'estensione a sequenze molto lunghe.
+dove la matrice dei pesi di \textit{attention} $\alpha(\mathbf{Q}, \mathbf{K}) \in \mathbb{R}^{N \times N}$ è ottenuta tramite
 
-Questo principio di aggiornamento sequenziale è naturalmente insito nei modelli ricorrenti, i quali leggono i token singolarmente e aggiornano uno stato interno di dimensione fissa, senza la necessità di accedere a tutti gli stati pregressi.
+\begin{align}
+    \alpha(\mathbf{Q}, \mathbf{K}) &= \text{Softmax}\left(\frac{\mathbf{Q}\mathbf{K}^T}{\sqrt{d}} + \mathbf{Mask}\right) \nonumber \\
+    &= \begin{bmatrix}
+        \alpha_{1,1} & 0 & 0 & \cdots & 0 \\
+        \alpha_{2,1} & \alpha_{2,2} & 0 & \cdots & 0 \\
+        \alpha_{3,1} & \alpha_{3,2} & \alpha_{3,3} & \cdots & 0 \\
+        \vdots & \vdots & \vdots & \ddots & \vdots \\
+        \alpha_{N,1} & \alpha_{N,2} & \alpha_{N,3} & \cdots & \alpha_{N,N}
+    \end{bmatrix}.
+\end{align}
 
-\begin{observation}
-Nonostante l'architettura Transformer abbia dominato il campo degli LLM, le architetture ricorrenti (come i moderni \textit{state space models}, es. Mamba) stanno riscontrando un rinnovato interesse proprio per la loro efficienza intrinseca nella gestione di contesti estesi, ponendosi come promettenti alternative ai Transformer classici.
-\end{observation}
+Ogni vettore riga $\left[ \alpha_{i,0} \quad \cdots \quad \alpha_{i,i} \quad 0 \quad \cdots \quad 0 \right]$ corrisponde a una distribuzione sui token che indica come l'$i$-esimo token presta attenzione (\textit{attends}) agli altri. Poiché i \textit{language models} predicono il token successivo basandosi solo sul loro contesto sinistro (\textit{left-context}), normalmente scriviamo l'output del modello di \textit{attention} alla posizione $i$ come
+
+\begin{align}
+    y_i = \text{Att}_{\text{qkv}}(\mathbf{q}_i, \mathbf{K}_{\le i}, \mathbf{V}_{\le i}) &= \left[ \alpha_{i,1} \quad \cdots \quad \alpha_{i,i} \right] \begin{bmatrix} \mathbf{v}_1 \\ \vdots \\ \mathbf{v}_i \end{bmatrix} \nonumber \\
+    &= \sum_{j=1}^{i} \alpha_{i,j}\mathbf{v}_j,
+\end{align}
+
+
 
 \subsection{Cache and Memory (Cache e Memoria)}
 
