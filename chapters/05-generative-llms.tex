@@ -1744,37 +1744,115 @@ I miglioramenti ai modelli Transformer standard possono essere analizzati dalla 
 
 \begin{definition}{Formati a Precisione Ridotta}
 Si tratta di tecniche di ottimizzazione che consistono nell'abbandonare il formato in virgola mobile a 32 bit (FP32) in favore di formati a precisione ridotta come FP16, BF16 o la quantizzazione a interi a 8 bit (INT8). L'utilizzo di questi formati riduce l'occupazione di memoria e incrementa il throughput computazionale, facilitando l'elaborazione di sequenze più lunghe.
+ridurre i bit significa ridurre le informazioni disponibili per rappresentare ciascun numero. Accettiamo una certa approssimazione numerica per rendere il modello più efficiente, cercando di non compromettere significativamente le sue prestazion
 \end{definition}
 
 Oltre all'impiego della precisione ridotta, è possibile ottimizzare i Transformer sfruttando tecniche consapevoli dell'hardware (*hardware-aware*), ad esempio implementando operazioni di auto-attenzione che ottimizzano le operazioni di input/output (IO-aware) sulle GPU.
+\\
 
 Un ulteriore e fondamentale approccio per gestire sequenze estese è il \textbf{parallelismo di sequenza}.
-In questo schema, il problema computazionale del calcolo dell'attenzione viene suddiviso assegnando a diversi nodi di calcolo (es. diverse GPU in un cluster) specifici segmenti della sequenza. Nello specifico, considerando la computazione dell'attenzione per una query $q_i$, le matrici delle chiavi ($K$) e dei valori ($V$) vengono suddivise lungo la dimensione della sequenza, ottenendo sottomatrici $\{K^{[1]}, \dots, K^{[n_u]}\}$ e $\{V^{[1]}, \dots, V^{[n_u]}\}$. Ciascuna coppia di sottomatrici viene elaborata parallelamente da un nodo distinto.
+In questo schema, il problema computazionale del calcolo dell'attenzione viene suddiviso assegnando a diversi nodi di calcolo (es. diverse GPU in un cluster) specifici segmenti della sequenza. Nello specifico, considerando la computazione dell'attenzione per una query $q_i$, le matrici delle chiavi ($K$) e dei valori ($V$) vengono suddivise lungo la dimensione della sequenza (\textbf{cioè vengono divise per righe e quindi non si spezzano le feature}), ottenendo sottomatrici $\{K^{[1]}, \dots, K^{[n_u]}\}$ e $\{V^{[1]}, \dots, V^{[n_u]}\}$. Ciascuna coppia di sottomatrici viene elaborata parallelamente da un nodo distinto.
+Ad esempio quello che potrei avere è un Transformer debba elaborare una sequenza di 6 token. Dopo le proiezioni, otteniamo le matrici \(K\) e \(V\):
+\[
+K=
+\begin{bmatrix}
+k_0\\
+k_1\\
+k_2\\
+k_3\\
+k_4\\
+k_5
+\end{bmatrix}
+\qquad
+V=
+\begin{bmatrix}
+v_0\\
+v_1\\
+v_2\\
+v_3\\
+v_4\\
+v_5
+\end{bmatrix}
+\]
+E potrei divedere le matrici per sequenza, in questo modo:
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.4\textwidth]{_files/_images/gpu.png}
+\end{figure}
+Qui non viene detto, ma $Q$ rimane accessibile a tutti i nodi, quindi da un punto di vista implementativo $Q$ è condivisa.
 
-L'output del modello di auto-attenzione per la posizione $i$ è definito come:
+Inoltre,la divisione delle matrici $K$ e $V$ tra i nodi deve per forza contenere gli stessi indici di sequenza.
+
+\newpage
+
+In generale ricordiamo che l'output del modello di auto-attenzione per la posizione $i$ è definito come:
 \begin{equation}
-Att_{qkv}(q_i, K, V) = \sum_{j=0}^{m-1} \alpha_{i,j} v_j
+y_i = Att_{qkv}(q_i, K, V) = \sum_{m=1}^{N} \alpha_{im} v_m
 \end{equation}
 dove $\alpha_{i,j}$ rappresenta il peso di attenzione tra le posizioni $i$ e $j$. Tale peso viene calcolato normalizzando il prodotto scalare tra $q_i$ e $k_j$. Definendo il punteggio di attenzione grezzo come $\beta_{i,j}$:
 \begin{equation}
 \beta_{i,j} = \frac{q_i \cdot k_j}{\sqrt{d}} + Mask(i,j)
 \end{equation}
-dove $Mask(i,j)$ è la maschera causale, il peso finale $\alpha_{i,j}$ si ottiene applicando la funzione Softmax:
+\textbf{Questa è la stessa cosa che si faceva nei transformer standard, solo che là avevamo a disposizione tutte le matrici e quindi facevamo il prodotto fra $Q$ e $K^T$}.
+$Mask(i,j)$ è la maschera causale.
+
+\begin{example}{Calcolo coefficienti grezzi}
+    Quindi nel calcolare i coefficienti grezzi per il nodo 1 se il nodo possiede i primi due token e il nodo 2 i restanti 2 token: \\
+    $K^{(1)} = 
+    \begin{pmatrix}
+        k_1 \\
+        k_2
+    \end{pmatrix}$
+    $V^{(1)} = 
+    \begin{pmatrix}
+        v_1 \\
+        v_2
+    \end{pmatrix}$
+    allora
+    $Q * (K^{(1)})^T$ $\implies$
+    $A^{(1)} = 
+    \begin{pmatrix}
+        \beta_{1,1} & \beta_{1,2} \\
+        \beta_{2,1} & \beta_{2,2} \\
+        \dots \\
+        \beta_{N,1} & \beta_{N,2} 
+    \end{pmatrix}$;
+    $A^{(2)} = 
+    \begin{pmatrix}
+        \beta_{1,3} & \beta_{1,4} \\
+        \beta_{2,3} & \beta_{2,4} \\
+        \dots \\
+        \beta_{N,3} & \beta_{N,4} 
+    \end{pmatrix}$
+\end{example}
+
+
+
+Il peso finale $\alpha_{i,j}$ si ottiene applicando la funzione Softmax (anche nei transformer standard applicavamo la Softmax, dopo aver calcolato i coefficienti grezzi):
 \begin{equation}
 \alpha_{i,j} = Softmax(\beta_{i,j}) = \frac{\exp(\beta_{i,j})}{\sum_{j'} \exp(\beta_{i,j'})}
 \end{equation}
 
 In un sistema parallelo, calcolare il numeratore $\exp(\beta_{i,j})$ è immediato poiché le informazioni necessarie risiedono localmente nel nodo. Al contrario, il denominatore richiede una somma globale su tutti gli indici $j'$, necessitando il trasferimento di dati tra i nodi. Questa operazione può essere riscritta isolando i contributi dei singoli nodi:
 \begin{equation}
-\alpha_{i,j} = \frac{\exp(\beta_{i,j})}{\underbrace{\sum_{k_{j'} \in K^{[1]}} \exp(\beta_{i,j'})}*{\text{nodo 1}} + \dots + \underbrace{\sum*{k_{j'} \in K^{[u]}} \exp(\beta_{i,j'})}_{\text{nodo u}} + \dots}
+\alpha_{i,j} = \frac{\exp(\beta_{i,j})}{\underbrace{\sum_{k_{j'} \in K^{[1]}} \exp(\beta_{i,j'})}_{\text{nodo 1}} + \dots + \underbrace{\sum_{k_{j'} \in K^{[u]}} \exp(\beta_{i,j'})}_{\text{nodo u}} + \dots}
 \end{equation}
 dove l'aggregazione di queste somme parziali viene gestita tramite operazioni collettive altamente ottimizzate (come le operazioni \textit{all-reduce}).
-
+L'indice della sommatoria, serve a scorrere tutti gli indici dei token di $K$, e utilizzeremo quegli indici per identificare $\beta$, infatti se consideriamo l'esempio di prima, per il nodo 2, $k_j' \in \{k_3,k_4\}$ e quindi $j' \in \{3,4\}$
+Ogni nodo si calcola quindi le proprie somme, e le convidide al nodo che si deve calcolare $\beta_{i,j}$.
+\\
 Una volta calcolati i pesi $\alpha_{i,j}$, il calcolo dell'output finale viene parallelizzato in modo analogo, sommando i contributi vettoriali pesati provenienti dai diversi nodi:
 \begin{equation}
-Att_{qkv}(q_i, K, V) = \underbrace{\sum_{v_{j'} \in V^{[1]}} \alpha_{i,j'} v_{j'}}*{\text{nodo 1}} + \dots + \underbrace{\sum*{v_{j'} \in V^{[u]}} \alpha_{i,j'} v_{j'}}_{\text{nodo u}} + \dots
+Att_{qkv}(q_i, K, V) = \underbrace{\sum_{v_{j'} \in V^{[1]}} \alpha_{i,j'} v_{j'}}_{\text{nodo 1}} + \dots + \underbrace{\sum_{v_{j'} \in V^{[u]}} \alpha_{i,j'} v_{j'}}_{\text{nodo u}} + \dots
 \end{equation}
-
+Se consideriamo l'esempio di prima e prendo in considerazione $i = 1$, cioè il calcolo di $y_1$, allora dal nodo 1 si prenderà la somma:
+\begin{equation}
+    y_1 = a_{1,1} v_1 + a_{1,2} v_2
+\end{equation}
+e con il nodo 2 si aggiunge:
+\begin{equation}
+    y_1 = a_{1,1} v_1 + a_{1,2} v2 + a_{1,3} v_3 + a_{1,4} v_4 
+\end{equation}
 \subsection{Efficient Architectures (Architetture Efficienti)}
 
 Il principale ostacolo per l'applicazione dei Transformer a sequenze lunghe risiede nella complessità quadratica in tempo e memoria dell'auto-attenzione standard. Inoltre, la generazione autoregressiva richiede il mantenimento di una cache per chiavi e valori (*KV cache*) che cresce linearmente con il numero di token processati, diventando proibitiva per contesti estremamente lunghi. Per questo motivo, sono state sviluppate architetture alternative e varianti più efficienti.

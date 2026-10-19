@@ -181,6 +181,38 @@ Cioè è chiaramente quello che si fa nell'\textbf{equazione 3.7} per calcolare 
 
 
 Successivamente si moltiplica la matrice $A$ per la matrice $X$, quello che esce fuori è la matrice $Y$ dei vettori trasformati, dove la riga $n-esima$ conterrà $y_n^t$
+\paragraph{Perchè esce fuori la matrice $Y$ ?}
+Questo perchè ricorda la relazione di attenzione, ad esempio per $n$ = 1:
+\begin{equation}
+    y_1 = a_{11} \begin{pmatrix} x_{11} \\ x_{12} \\ \dots \\ x_{1D} \end{pmatrix} + a_{12} \begin{pmatrix} x_{21} \\ x_{22} \\ \dots \\ x_{2D} \end{pmatrix} + \dots + a_{1N} \begin{pmatrix} x_{N1} \\ x_{N2} \\ \dots \\ x_{ND} \end{pmatrix} 
+\end{equation} 
+Quindi il primo elemento del vettore $y_1$ è dato da:
+\begin{equation}
+    a_{11} x_{11} + a_{12} x_{21} + \dots + a_{1N} x_{N1}
+\end{equation}
+E infatti rivedendo la moltiplicazione fra matrici riga per colonna, fra $A$ e $X$, si ha:
+\begin{equation}
+    A = 
+    \begin{pmatrix}
+    a_{11} & a_{12} & \dots & a_{1N} \\
+    a_{21} & a_{22} & \dots & a_{2N} \\
+    \dots  \\
+    a_{N1} & a_{N2} & \dots & a_{NN} 
+    \end{pmatrix}
+    X = 
+    \begin{pmatrix}
+    x_{11} & x_{12} & \dots & x_{1D} \\
+    x_{21} & x_{22} & \dots & x_{2D} \\
+    \dots \\
+    x_{N1} & x_{N2} & \dots & x_{ND} 
+    \end{pmatrix}
+\end{equation}
+Si ha che il primo elemento della matrice $y_{11}$ è proprio:
+\begin{equation}
+    a_{11} x_{11} + a_{12} x_{21} + \dots + a_{1N} x_{N1}
+\end{equation}
+Questo poi vale per tutti gli elementi di $y_1$ che sarà formato dalla prima riga.
+
 
 
 \newpage
