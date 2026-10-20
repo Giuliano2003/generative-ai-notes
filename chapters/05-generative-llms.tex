@@ -1854,6 +1854,51 @@ e con il nodo 2 si aggiunge:
     y_1 = a_{1,1} v_1 + a_{1,2} v2 + a_{1,3} v_3 + a_{1,4} v_4 
 \end{equation}
 
+\subsection{KV Cache}
+Tecnica usata solamentte durante l'inferenza e non durante il training.
+\subsubsection*{1. Output del blocco Transformer}
+Dopo aver attraversato tutti i layer del decoder-only transformer, si ottiene la matrice delle rappresentazioni nascoste $H^L \in \mathbb{R}^{N \times d_{\text{model}}}$, dove $N$ è la lunghezza della sequenza corrente e $d_{\text{model}}$ è la dimensione dell'embedding. 
+
+Per la predizione del token successivo $x_{N+1}$:
+\begin{itemize}
+    \item Si considera solo l'ultimo vettore riga $h_N^L \in \mathbb{R}^{1 \times d_{\text{model}}}$ corrispondente alla posizione $N$. Grazie alla maschera causale dell'attention, $h_N^L$ ha già integrato matematicamente tutta l'informazione del contesto precedente.
+    \item Si applica la trasformazione lineare della Language Modeling Head, definita dai pesi $W_{\text{lm}} \in \mathbb{R}^{d_{\text{model}} \times |V|}$:
+    \begin{equation}
+        z_N = h_N^L W_{\text{lm}} \in \mathbb{R}^{1 \times |V|}
+    \end{equation}
+    \item Si applica la funzione Softmax ai logit $z_N$ per ottenere la distribuzione di probabilità sul vocabolario, da cui si campiona (o si seleziona tramite strategie come greedy search o top-$p$) il prossimo token $x_{N+1}$.
+\end{itemize}
+
+\subsubsection*{2. Il problema senza KV Cache}
+Al passo successivo, per generare il token $x_{N+2}$, l'approccio \textit{naïve} prenderebbe in input l'intera sequenza aggiornata $[x_1, x_2, \dots, x_N, x_{N+1}]$ di lunghezza $N+1$. 
+
+Tuttavia, a causa della matrice di mascheramento causale, le rappresentazioni Key ($K$) e Value ($V$) dei token passati nei layer precedenti non variano mai in funzione dei token futuri. Ricalcolarle interamente da zero ad ogni nuovo passo introduce un costo computazionale quadratico rispetto alla sequenza, rendendo la generazione autoregressiva estremamente inefficiente.
+
+\subsubsection*{3. Funzionamento della KV Cache}
+Con l'introduzione della KV Cache, al passo $N+1$ il nuovo input per il Transformer \textbf{non è l'intera sequenza, ma solo il singolo token appena generato} $x_{N+1}$ (un vettore $1 \times d_{\text{model}}$).
+
+Il processo per un generico layer $l$ avviene nei seguenti step:
+\begin{enumerate}
+    \item \textbf{Calcolo proiettato per il nuovo token:} Vengono calcolati i vettori Query, Key e Value unicamente per l'input corrente $x_{N+1}$:
+    \begin{align}
+        q_{N+1}^{(l)} &= x_{N+1} W_Q \in \mathbb{R}^{1 \times d_k} \\
+        k_{N+1}^{(l)} &= x_{N+1} W_K \in \mathbb{R}^{1 \times d_k} \\
+        v_{N+1}^{(l)} &= x_{N+1} W_V \in \mathbb{R}^{1 \times d_v}
+    \end{align}
+    \item \textbf{Aggiornamento della Cache:} I nuovi vettori $k_{N+1}^{(l)}$ e $v_{N+1}^{(l)}$ vengono concatenati alle matrici Key e Value salvate in memoria dai passi temporali precedenti:
+    \begin{align}
+        K_{1:N+1}^{(l)} &= \begin{bmatrix} K_{1:N}^{(l)} \\ k_{N+1}^{(l)} \end{bmatrix} \in \mathbb{R}^{(N+1) \times d_k} \\
+        V_{1:N+1}^{(l)} &= \begin{bmatrix} V_{1:N}^{(l)} \\ v_{N+1}^{(l)} \end{bmatrix} \in \mathbb{R}^{(N+1) \times d_v}
+    \end{align}
+    \item \textbf{Calcolo dell'Attention:} Il vettore Query del nuovo token ($q_{N+1}^{(l)}$) calcola l'attenzione rispetto a \textbf{tutte} le Key e i Value (le matrici storiche estratte dalla cache insieme ai vettori appena aggiunti):
+    \begin{equation}
+        \text{Attention}\left(q_{N+1}^{(l)}, K_{1:N+1}^{(l)}, V_{1:N+1}^{(l)}\right) = \text{softmax}\left( \frac{q_{N+1}^{(l)} \left(K_{1:N+1}^{(l)}\right)^T}{\sqrt{d_k}} \right) V_{1:N+1}^{(l)}
+    \end{equation}
+    L'output di questa operazione è un singolo vettore riga in $\mathbb{R}^{1 \times d_{\text{model}}}$, che viene passato come input al layer successivo.
+    Le diversi matrici Key e Value, sono diverse per ogni layer stacked del transformer (in questo paragrafo abbiamo supposto ci sia una sola testa).
+\end{enumerate}
+
+
 
 \subsection{Efficient Architectures (Architetture Efficienti)}
 
@@ -1885,11 +1930,84 @@ Ogni vettore riga $\left[ \alpha_{i,0} \quad \cdots \quad \alpha_{i,i} \quad 0 \
     &= \sum_{j=1}^{i} \alpha_{i,j}\mathbf{v}_j,
 \end{align}
 
+\begin{observation}{Perchè questa notazione?}
+    Consideriamo in modo compatto $Q$ e $K$:
+    \[
+        Q = \begin{pmatrix} q_1 \\ q_2 \\ \dots \\ q_N \end{pmatrix};
+        K^T = \begin{pmatrix} k_1 & k_2 & \dots & k_N \end{pmatrix}
+    \]
+    Se osservo noto che se faccio la moltiplicazione matriciale, $q_1 k_1 q_1 k_2 \dots$ noto che solo i vettori con coefficienti minori o uguali sopravviono,
+    gli altri verranno eliminati tramite la matrice mask.
+    Quindi se considero ad esempio il vettore $q_1$, alla moltiplicazione sopravivve solo $q1 k_1$, che sarà poi applicata la softmax e il resto $\alpha_{1,1}$ sulla prima riga e il restante 0 sempre sulla stessa riga.
+    Quindi per il vettore $q_i$ si considera solo $K_{\leq i} = \begin{pmatrix} k_1 \\ \dots \\ k_i \end{pmatrix}$ (perché sopravvivono solo questi vettori).
+    Tu dovresti vedere
+    \[
+    \text{Att}_{\text{qkv}}(\mathbf{q}_i, \mathbf{K}_{\le i}, \mathbf{V}_{\le i})
+    \]
+    Come una funzione, che prende in pasto solo gli argomenti, e mi restituisce $y_i$, cioè la rappresentazione contestualizzata di quel token, usando quelli precedenti.
+
+\end{observation}
 
 
-\subsection{Cache and Memory (Cache e Memoria)}
+Nella formulazione standard della \textbf{self-attention}, il vettore $\begin{pmatrix} \alpha_{i,1} & \alpha_{i,2} & \dots & \alpha_{i,i} \end{pmatrix}$ si assume \textbf{denso}, significa che quasi tutte le entries valide sono diverse da zero.
+Nell'attenzione sparsa, è computato solo un sottoinsieme predefinito di queste entries, mentre le rimanenti sono esplicitamente ignorate (\textbf{messe a zero}). Consideriamo $G \subseteq \{1,\dots,i\}$ che è l'insieme degli indici delle entries attive (cioè che non sono messe a zero).
+In questo modo l'output del modello che usa la sparse attention in posizione $i$, diventa:
+\begin{equation}
+    \text{Att}_{\text{sparse}}(\mathbf{q_i}, \mathbf{K_{<=i}}, \mathbf{V_{<=i}}) = \sum_{j \in G} \alpha'_{i,j} v_j
+\end{equation}
+Qui $\{\alpha'_{i,j}\}$ sono normalizzati su $G$, questo significa che la somma dei coefficienti di attenzione è uguale a 1 considerando soltanto gli indici selezionati, mentre quelli esclusi hanno peso zero.
+Quindi per compesare gli indici maggiori di 0, $\{\alpha'_{i,j}\}$ sono diversi da $\{\alpha_{i,j}\}$ (in particolare noi abbiamo $\{\alpha'_{i,j}\}$ > $\{\alpha_{i,j}\}$).
+La sparsità del modello è determinata dalla dimensione di $G$.
+Differenti modelli di attenzione sparsa differiscono nel modo in cui definiamo $G$.
+Un metodo semplice è definire $G$ basandoci su \textbf{Design Patterns euristici}.
+Per esempio, un pattern molto usato consiste nell'avere $G$ che copre una finestra di token vicino ad $i$.
 
-I modelli LLM basati su Transformer standard impiegano meccanismi di attenzione globale densa che, durante l'inferenza autoregressiva, richiedono il salvataggio in memoria delle rappresentazioni di tutti i token precedenti (KV cache). Poiché l'ingombro di tale memoria diventa impraticabile per testi prolissi, per superare questo collo di bottiglia la ricerca ha introdotto l'uso di moduli di memoria ausiliaria che codificano e comprimono il contesto. Queste soluzioni si dividono ampiamente in memorie interne di dimensione fissa (come finestre scorrevoli, medie mobili o memorie ricorrenti) e memorie esterne che archiviano vettori ricercabili tramite algoritmi efficienti di recupero (*k-Nearest Neighbors* o framework *RAG*).
+
+Un problema molto ricorrente è il fatto che anche con questi modelli di attenzione ci sono problemi di memoria, durante la fase di inferenza.
+Cioè nelle architteture dei Transformer che abbiamo visto finora, per generare un token (durante la fase di inferenza in modo auto-regressivo come abbiamo visto nel capitolo della KV-Cache) bisogna mantenere in memoria per ogni layer le chiavi e i valori generati fino a quel momento.
+Quando le sequenze diventano molto lunghe, la dimensione di questo cache cresce linearmente con la lunghezza del contesto, rendendo l'inferenza un'operazione estremamente pesante in termini di VRAM.
+Di conseguenza, per generare il token $i$-esimo, il modello è costretto a:
+\begin{itemize}
+    \item Prendere la query corrente $\mathbf{q}_i$.
+    \item Scorrere uno per uno tutti i vettori di chiave $(\mathbf{k}_1, \mathbf{k}_2, \dots, \mathbf{k}_i)$ e di valore $(\mathbf{v}_1, \mathbf{v}_2, \dots, \mathbf{v}_i)$ memorizzati nel KV Cache.
+    \item Calcolare $i$ distinti prodotti scalari per determinare la distribuzione di attenzione.
+\end{itemize}
+Man mano che la sequenza allunga (es. $i = 100.000$ token), per generare un solo nuovo token bisogna scorrere e rileggere $100.000$ vettori dalla memoria.
+La Linear Attention elimina del tutto la necessità di memorizzare esplicitamente i valori e le chiavi del passato:
+sostituendo la normalizzazione Softmax con una formulazione lineare basata su una funzione di kernel $\phi(\cdot)$.
+
+Mappando ciascuna query e chiave in uno spazio di feature mediante la trasformazione:
+\[
+\mathbf{q}'_i = \phi(\mathbf{q}_i), \quad \mathbf{k}'_i = \phi(\mathbf{k}_i)
+\]
+
+il calcolo dell'attenzione alla posizione $i$ può essere approssimato e riscritto come:
+\begin{equation}
+\text{Att}_{\text{qkv}}(\mathbf{q}_i, \mathbf{K}_{\le i}, \mathbf{V}_{\le i}) \approx \text{Att}_{\text{linear}}(\mathbf{q}'_i, \mathbf{K}'_{\le i}, \mathbf{V}_{\le i}) = \frac{\mathbf{q}'_i \mu_i}{\mathbf{q}'_i \nu_i}
+\end{equation}
+
+dove i termini $\mu_i$ e $\nu_i$ rappresentano variabili calcolate in modo ricorsivo ad ogni passo $i$:
+\begin{align}
+\mu_i &= \mu_{i-1} + \mathbf{k}'_i\,^\top \mathbf{v}_i \label{eq:linear_attn_mu} \\
+\nu_i &= \nu_{i-1} + \mathbf{k}'_i\,^\top \label{eq:linear_attn_nu}
+\end{align}
+
+In questo contesto, le variabili $\mu_i$ e $\nu_i$ agiscono come sommari compressi della storia passata fino alla posizione $i$:
+\begin{itemize}
+    \item \textbf{$\mu_i$}: Accumula i prodotti esterni tra le chiavi trasformate e i valori, sintetizzando l'informazione contestuale.
+    \item \textbf{$\nu_i$}: Accumula le chiavi trasformate, fungendo da termine di normalizzazione.
+\end{itemize}
+
+Ovviamente $q'_i$ e $k'_i$ saranno diversi per ogni layer stacked L del transformer
+
+I principali vantaggi di questo approccio sono:
+\begin{itemize}
+    \item \textbf{Memoria costante $\mathcal{O}(1)$}: Non occorre salvare nel KV Cache la sequenza completa delle chiavi e dei valori passati; è sufficiente mantenere in memoria solo gli stati aggiornati $\mu_i$ e $\nu_i$.
+    \item \textbf{Complessità computazionale $\mathcal{O}(1)$ per token}: L'aggiornamento a ogni step richiede solo un'operazione di somma e un prodotto con il nuovo token, rendendo il costo di generazione indipendente dalla lunghezza della sequenza.
+    \item \textbf{Scalabilità}: Il modello può essere facilmente esteso per elaborare sequenze con un contesto estremamente lungo senza incorrere in saturazione della VRAM.
+\end{itemize}
+
+
 
 \subsection{Position Extrapolation and Interpolation (Estrapolazione e Interpolazione della Posizione)}
 
