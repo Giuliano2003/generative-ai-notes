@@ -11,6 +11,11 @@ Infatti nella fase di inferenza (generazione in tempo reale)
     \item Fase di Prefill (t $\le$ k): I token di input $w_1, \dots, w_k$ vengono passati insieme al modello in un singolo ciclo per calcolare le chiavi e i valori della self-attention (la cosiddetta KV Cache).
     \item Fase Autoregressiva (t > k): Il modello calcola la distribuzione di probabilità per il primo token di risposta:$$P(w_{k+1} \mid w_1, \dots, w_k)$$Una volta campionato $w_{k+1}$, questo viene concatenato al contesto e diventa parte della storia per il passo successivo:$$P(w_{k+2} \mid w_1, \dots, w_k, w_{k+1})$$Il ciclo prosegue finché non viene generato un token speciale di fine sequenza (EOS) o non si raggiunge la lunghezza massima $T$.
 \end{enumerate}
+\begin{center}
+    Quindi la generazione nella fase di inferenza, inizia dal contesto di input.
+\end{center}
+In modo formale
+$$P(w_{t+1}, \dots, w_T \mid w_1, \dots, w_t) = \prod_{i=t+1}^{T} P(w_i \mid w_1, \dots, w_{i-1})$$
 
 Durante l'addestramento (pre-traning che abbiamo visto anche nei capitoli precedenti) non c'è una separazione concettuale tra prompt e risposta: l'intero testo è semplicemente un'unica sequenza $w_1, \dots, w_T$
 e quindi la regola della catena della probabilità si applica teoricamente a tutti i token:$$P(w_1, w_2, \dots, w_T) = \prod_{t=1}^{T} P(w_t \mid w_{<t})$$
@@ -83,36 +88,17 @@ Consideriamo il prefisso ``Il gatto dorme sul''. Un modello assegna:
 Se nel testo di test la continuazione effettiva è ``divano'', la probabilità usata per valutare quella predizione è $0.50$. Se la continuazione effettiva fosse ``prato'', sarebbe $0.20$. A parità delle altre condizioni, assegnare una probabilità più alta al token corretto significa effettuare una predizione migliore.
 \end{example}
 
-\subsection{Informazione associata a un evento}
-
-\begin{definition}{Self-information o surprisal}
-Per un evento $x$ con probabilità $P(x)>0$, la quantità di informazione associata alla sua osservazione, misurata in bit, è
-\begin{equation}
-I(x)=-\log_2 P(x).
-\end{equation}
-\end{definition}
-
-La funzione logaritmica traduce la probabilità in una misura di \emph{sorpresa}: un evento quasi certo porta poca informazione, mentre un evento raro ne porta molta. Infatti:
-\begin{align}
-P(x)=1 &\quad\Longrightarrow\quad I(x)=-\log_2 1=0,\\
-P(x)=\tfrac12 &\quad\Longrightarrow\quad I(x)=1\ \text{bit},\\
-P(x)=\tfrac14 &\quad\Longrightarrow\quad I(x)=2\ \text{bit},\\
-P(x)=\tfrac18 &\quad\Longrightarrow\quad I(x)=3\ \text{bit}.
-\end{align}
-
-Si usa il segno meno perché $\log_2 p\leq 0$ per $0<p\leq1$: in questo modo l'informazione è non negativa. La base $2$ esprime il risultato in bit. Un evento con probabilità esattamente zero, se osservato, comporta una sorpresa infinita nel limite $p\to0^+$.
-
 \subsection{Entropia come informazione media}
 
 \begin{definition}{Entropia di Shannon}
-Per una variabile aleatoria discreta $X$ con possibili valori $x$ e funzione di massa $p(x)$, l'entropia in bit è
+Ricordiamo dal capitolo precedente che per una variabile aleatoria discreta $X$ con possibili valori $x$ e funzione di massa $p(x)$, l'entropia in bit è
 \begin{equation}
 H(X)=\mathbb{E}[I(X)]=-\sum_{x}p(x)\log_2 p(x),
 \end{equation}
 con la convenzione $0\log_2 0=0$.
 \end{definition}
 
-L'entropia è la \emph{media} delle informazioni associate ai possibili esiti, pesata secondo le rispettive probabilità. La \emph{self-information} valuta la sorpresa di un singolo esito; l'\emph{entropia} valuta invece l'incertezza media della distribuzione, prima dell'osservazione.
+L'\emph{entropia} valuta invece l'incertezza media della variabile aleatoria, prima dell'osservazione, cioè prima di effettuare l'esperimento.
 
 \begin{example}{Moneta equilibrata e moneta sbilanciata}
 Per una moneta con probabilità $1/2$ per ciascun esito:
