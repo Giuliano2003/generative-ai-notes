@@ -1,0 +1,217 @@
+\chapter{Information Theory}
+\section{Entropia}
+
+L'entropia è un concetto fondamentale della teoria dell'informazione e permette di \textbf{quantificare la quantità media di informazione associata a una variabile aleatoria}.
+
+Per comprenderne il significato, partiamo dal concetto di informazione associata all'osservazione di un singolo evento.
+
+\subsection{Quantità di informazione di un evento}
+
+Consideriamo una variabile aleatoria discreta $x$, descritta da una distribuzione di probabilità $p(x)$.
+
+Vogliamo determinare quanta informazione otteniamo quando osserviamo che la variabile assume un determinato valore.
+
+L'idea fondamentale è che \textbf{la quantità di informazione ricevuta dipende da quanto è sorprendente l'evento osservato}.
+
+In particolare:
+\begin{itemize}
+    \item Un evento molto probabile fornisce poca informazione, perché ci aspettavamo che accadesse.
+    \item Un evento poco probabile fornisce molta informazione, perché la sua osservazione è sorprendente.
+    \item Un evento certo, cioè con probabilità $1$, non fornisce alcuna nuova informazione.
+\end{itemize}
+
+\paragraph{Esempio intuitivo.}
+
+Supponiamo di ricevere una delle seguenti notizie:
+\begin{itemize}
+    \item \textbf{Evento A:} domani sorgerà il Sole, con probabilità praticamente uguale a $1$.
+    \item \textbf{Evento B:} lanciando un dado equilibrato uscirà il numero $6$, con probabilità $1/6$.
+\end{itemize}
+
+La seconda notizia fornisce più informazione della prima, poiché descrive un evento meno prevedibile.
+
+Cerchiamo quindi una funzione $h(x)$ che misuri l'informazione associata all'osservazione di $x$.
+
+Questa funzione deve soddisfare due proprietà fondamentali:
+\begin{enumerate}
+    \item \textbf{Dipendenza dalla probabilità:} al diminuire di $p(x)$, la quantità di informazione $h(x)$ deve aumentare.
+    
+    \item \textbf{Additività per eventi indipendenti:} se due eventi $x$ e $y$ sono statisticamente indipendenti, l'informazione ottenuta osservandoli entrambi deve essere uguale alla somma delle informazioni ottenute separatamente:
+    \[
+        h(x,y)=h(x)+h(y).
+    \]
+\end{enumerate}
+
+Ricordiamo che, per eventi indipendenti, vale:
+\[
+    p(x,y)=p(x)p(y).
+\]
+
+Pertanto, cerchiamo una funzione che trasformi il prodotto delle probabilità in una somma.
+
+La funzione logaritmica soddisfa esattamente questa proprietà:
+\[
+    \log_2\bigl(p(x)p(y)\bigr)
+    =
+    \log_2 p(x)+\log_2 p(y).
+\]
+
+Introducendo un segno negativo, otteniamo la misura di informazione:
+
+\[
+    \boxed{h(x)=-\log_2 p(x)}
+\]
+
+Il segno negativo è necessario perché, essendo $0<p(x)\leq 1$, il logaritmo è minore o uguale a zero.
+
+In questo modo:
+\[
+    h(x)\geq 0.
+\]
+
+La quantità $h(x)$ si misura in \textbf{bit}, poiché abbiamo utilizzato un logaritmo in base $2$.
+
+\paragraph{Esempio numerico.}
+
+Consideriamo tre eventi con probabilità differenti:
+\[
+\begin{aligned}
+    p(x_1)&=1,\\
+    p(x_2)&=\frac{1}{2},\\
+    p(x_3)&=\frac{1}{8}.
+\end{aligned}
+\]
+
+Calcoliamo la quantità di informazione associata a ciascun evento:
+
+\[
+\begin{aligned}
+    h(x_1)&=-\log_2 1=0 \text{ bit},\\[4pt]
+    h(x_2)&=-\log_2 \frac12=1 \text{ bit},\\[4pt]
+    h(x_3)&=-\log_2 \frac18=3 \text{ bit}.
+\end{aligned}
+\]
+
+Osserviamo che l'evento meno probabile produce la maggiore quantità di informazione.
+
+\medskip
+\noindent
+\textbf{Attenzione:} $h(x)$ misura l'informazione ottenuta osservando uno specifico valore della variabile aleatoria. Non rappresenta ancora l'informazione media della distribuzione.
+
+\subsection{Definizione di entropia}
+Prima di parlare della definizione, tieni conto di una cosa.
+Quando diciamo di "osservare" una variabile aleatoria, stiamo dicendo che, noi la variabile aleatoria l'abbiamo già definita, ad esempio in questo modo:
+\[
+\begin{aligned}
+\Omega = \{T,C\} \\
+X : \Omega \to S \subset \mathbb{R} \\
+X \in \{0,1\} , X(T) = 0, X(C) = 1 \\
+p_X(0) = P(X = 0) = 0.9 ; h(0) = 0.152 bit \\
+p_X(1) = P(X = 1) = 0.1 h(1) = 3.322 bit  \\
+\end{aligned}
+\]
+Una volta definita, possiamo trattare la variabile aleatoria, come un "filtro", ad esempio una volta definita, io faccio un esperimento (seguendo lo spazio di campionamento) e supponiamo esce "Testa", uscendo Testa
+posso applicare la variabile aleatoria che mi restituisce 0, e la pmf, dice che la probabilità di uscire 0, era 0.9, l'informazione associata \textbf{a questo specifico evento è bassa} perchè è molto probabile che accada.
+
+\begin{center}
+    Quindi finora abbiamo visto la misura dell'informazione per un singolo evento, io adesso vorrei misurare l'informazione associata all'osservazione della variabile aleatoria.
+    E quindi nelle successive pagine, andremo a vedere l'informazione media, che ci aspettiamo di ottenere osservando una variabile aleatoria.
+\end{center}
+Per farlo, consideriamo l'operatore di valore atteso per una variabile aleatoria:
+\[
+\mathbb{E}[X] = \sum_{x_i \in S} x_i P(X = x_i)
+\]
+è la somma di tutti i valori che la variabile può assumere, ciascuno pesato dalla probabilità con cui si verifica.
+Ci dice in media, i valori che assume una variabile aleatoria.
+
+Possiamo estendere questo concetto al valore atteso della funzione $h(x)$ rispetto alla distribuzione $p(x)$:
+
+\[
+    H[x]=\mathbb{E}_{x}[h(x)].
+\]
+Intuitivamente, l'entropia misura la quantità media di informazione che otteniamo osservando il valore assunto dalla variabile aleatoria \(x\), distribuita secondo la funzione di massa di probabilità \(p(x)\).
+
+\newpage
+Ricordando che il valore atteso di una funzione $f(x)$ è:
+
+\[
+    \mathbb{E}_{x}[f(x)]
+    =
+    \sum_x p(x)f(x),
+\]
+
+e sostituendo $h(x)=-\log_2 p(x)$, otteniamo:
+
+\[
+    H[x]
+    =
+    \sum_x p(x)\bigl(-\log_2 p(x)\bigr).
+\]
+
+Quindi:
+
+\[
+    \boxed{
+        H[x]=-\sum_x p(x)\log_2 p(x)
+    }
+\]
+
+Questa quantità prende il nome di \textbf{entropia della variabile aleatoria $x$}.
+
+L'entropia misura quindi l'informazione media associata ai possibili valori della variabile, tenendo conto delle rispettive probabilità.
+
+\paragraph{Interpretazione.}
+
+È importante distinguere:
+\begin{itemize}
+    \item $h(x)$: informazione associata a una singola osservazione.
+    \item $H[x]$: informazione media che ci aspettiamo di ottenere osservando la variabile aleatoria.
+\end{itemize}
+Ad esempio se
+\[
+H[x]=0.469\text{ bit }
+\]
+può essere considerata come l'informazione media, osservando quella variabile aleatoria, è una media.
+Non significa che ogni osservazione fornisca esattamente \(0.469\) bit, ma che, considerando molte osservazioni della variabile aleatoria, la quantità di informazione per osservazione tende mediamente a quel valore.
+
+L'entropia può essere interpretata anche come una misura dell'incertezza associata \textbf{all'osservazione della} variabile:
+\begin{itemize}
+    \item Se il risultato dell'osservazione è prevedibile, l'entropia è bassa.
+    \item Se il risultato dell'osservazione è molto incerto, l'entropia è alta.
+\end{itemize}
+
+\begin{table}[h]
+    \centering
+    \begin{tabular}{|c|c|l|}
+        \hline
+        \textbf{Distribuzione} & \textbf{Entropia} & \textbf{Interpretazione} \\
+        \hline
+        $100\%$ Testa, $0\%$ Croce & $0$ bit & Risultato certo \\
+        \hline
+        $90\%$ Testa, $10\%$ Croce & $0.469$ bit & Risultato abbastanza prevedibile \\
+        \hline
+        $50\%$ Testa, $50\%$ Croce & $1$ bit & Massima incertezza \\
+        \hline
+    \end{tabular}
+    \caption{Confronto dell'entropia per diverse distribuzioni di probabilità.}
+    \label{tab:entropia_moneta}
+\end{table}
+
+\paragraph{Caso di probabilità nulla.}
+
+Nella formula dell'entropia può comparire un valore $x$ tale che $p(x)=0$.
+
+In questo caso, adottiamo la convenzione:
+
+\[
+    \boxed{0\log_2 0=0}
+\]
+
+La convenzione deriva dal limite:
+
+\[
+    \lim_{\varepsilon\to 0^+}
+    \varepsilon\ln\varepsilon=0.
+\]
+
+Pertanto, gli eventi con probabilità nulla non contribuiscono al valore dell'entropia.
