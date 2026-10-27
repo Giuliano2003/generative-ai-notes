@@ -2044,3 +2044,33 @@ Per misurare l'effettiva capacità di un LLM di recuperare e comprendere dettagl
 Oltre ai task sintetici, si ricorre a compiti NLP applicati su testi reali e corposi, come il riassunto multi-documento, il completamento di codice o il *question answering* su documenti estesi, per allineare la valutazione alle aspettative dell'utente finale.
 
 Nonostante i numerosi metodi proposti, permangono notevoli sfide. Molti test sintetici valutano capacità meccaniche di recupero dell'informazione, che non implicano necessariamente una reale e profonda "comprensione" logica dell'intero contesto da parte del modello. Inoltre, i risultati sono altamente sensibili al formato del prompt, creando discrepanze tra le prestazioni valutate in ambienti sintetici e i reali contesti applicativi. La valutazione olistica degli LLM su sequenze lunghe rimane, pertanto, un'area di ricerca aperta e critica.
+
+
+Quindi questi tipi di transformer sono usati per creare LLM auto-regressivi, come i modelli GPT
+
+\renewcommand{\arraystretch}{1.45}
+\begin{table}[h!]
+\centering
+\begin{tabularx}{\textwidth}{>{\bfseries}l X X X}
+\hline
+\rowcolor{headerbg}
+\textbf{Architettura} & \textbf{Meccanismo di Attenzione} & \textbf{Scopo Principale} & \textbf{Esempi di Modelli} \\
+\hline
+Encoder-Only & 
+  \textbf{Bidirezionale}\newline (vede l'intero contesto contemporaneamente) & 
+  Comprensione del testo, classificazione, ricerca semantica, embedding & 
+  BERT, RoBERTa \\
+\rowcolor{altrow}
+Encoder-Decoder & 
+  \textbf{Ibrido}\newline (Encoder bidirezionale + Decoder causale) & 
+  Traduzione automatica, riassunto di testi lunghi & 
+  T5, BART, Transformer originale (2017) \\
+Decoder-Only & 
+  \textbf{Causale / Unidirezionale}\newline (vede solo i token precedenti) & 
+  Generazione di testo, conversazione, scrittura di codice, reasoning & 
+  GPT-4, Llama 3, Mistral, Claude \\
+\hline
+\end{tabularx}
+\caption{Confronto sinottico tra le categorie di Transformer.}
+\label{tab:transformer-comparison}
+\end{table}

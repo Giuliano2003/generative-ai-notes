@@ -1,0 +1,875 @@
+\chapter{Valutazione degli LLMs nei contesti lunghi}
+
+\section{Preambolo}
+Nella fase di inferenza (generazione real-time), $w_1, w_2, \dots, w_T$ rappresentano la sequenza unificata che comprende sia i token di input sia i token di output. Non esistono due strutture distinte o vettori separati.Se individuiamo la posizione $k$ in cui termina il prompt dell'utente, la sequenza si suddivide naturalmente in:
+\begin{enumerate}
+    \item Token di Input (Prompt): $w_1, w_2, \dots, w_k$ (forniti dall'utente)
+    \item Token di Output (Generazione): $w_{k+1}, w_{k+2}, \dots, w_T$ (generati dal modello)
+\end{enumerate}
+Infatti nella fase di inferenza (generazione in tempo reale)
+\begin{enumerate}
+    \item Fase di Prefill (t $\le$ k): I token di input $w_1, \dots, w_k$ vengono passati insieme al modello in un singolo ciclo per calcolare le chiavi e i valori della self-attention (la cosiddetta KV Cache).
+    \item Fase Autoregressiva (t > k): Il modello calcola la distribuzione di probabilità per il primo token di risposta:$$P(w_{k+1} \mid w_1, \dots, w_k)$$Una volta campionato $w_{k+1}$, questo viene concatenato al contesto e diventa parte della storia per il passo successivo:$$P(w_{k+2} \mid w_1, \dots, w_k, w_{k+1})$$Il ciclo prosegue finché non viene generato un token speciale di fine sequenza (EOS) o non si raggiunge la lunghezza massima $T$.
+\end{enumerate}
+
+Durante l'addestramento (pre-traning che abbiamo visto anche nei capitoli precedenti) non c'è una separazione concettuale tra prompt e risposta: l'intero testo è semplicemente un'unica sequenza $w_1, \dots, w_T$
+e quindi la regola della catena della probabilità si applica teoricamente a tutti i token:$$P(w_1, w_2, \dots, w_T) = \prod_{t=1}^{T} P(w_t \mid w_{<t})$$
+cioè proprio il caso di cui parliamo ora.
+
+\section{Valutazione dei Large Language Models con contesti lunghi}
+
+\subsection{Il problema della valutazione}
+
+\begin{definition}{Long-context evaluation}
+La \emph{long-context evaluation} comprende i protocolli sperimentali progettati per verificare se un Large Language Model (LLM), quando riceve in ingresso un contesto molto esteso, sia realmente in grado di comprendere, recuperare e utilizzare informazioni distribuite nell'intero input.
+\end{definition}
+
+I protocolli di valutazione sviluppati per compiti tradizionali di \emph{Natural Language Processing} (NLP) (quelli senza contesti lunghi) non possono essere estesi automaticamente ai modelli con contesti molto lunghi. Il punto non è soltanto stabilire se l'output sia plausibile (cioè l'output che è stato generato prendendo questo contesto lungo in input), ma comprendere \emph{quali parti} del contesto siano state utilizzate per produrlo
+e se siano state sfruttate anche informazioni molto distanti dalla posizione in cui il modello genera la risposta.
+\\
+Facciamo un esempio :
+
+Supponiamo di fornire a un LLM un documento composto da 100.000 token, nel quale:
+\begin{enumerate}
+    \item Token 1.000: viene specificato che «Il codice segreto del progetto è ALFA123».
+    \item Token 50.000: vengono descritte altre informazioni.
+    \item Token 99.000: vengono trattati argomenti completamente diversi.
+    \item Token 100.000: poniamo la domanda: «Qual è il codice segreto del progetto?».
+\end{enumerate}
+Un modello capace di \textbf{gestire efficacemente contesti lunghi} dovrebbe rispondere ALFA123, anche se l'informazione necessaria si trova circa 99.000 token prima della domanda.
+Il problema è che un modello potrebbe avere una finestra di contesto di 100.000 token, ma non riuscire a utilizzare correttamente le informazioni presenti nelle parti più lontane.
+Infatti, poter ricevere un'informazione in input non significa necessariamente riuscire a sfruttarla.
+Un protocollo di valutazione deve pertanto verificare almeno due capacità:
+\begin{enumerate}
+    \item \textbf{Comprensione dell'intero contesto}: il modello deve integrare informazioni poste in sezioni diverse di un documento, anziché concentrarsi su poche frasi vicine alla domanda.
+    \item \textbf{Utilizzo del contesto nella predizione}: le informazioni rilevanti, anche quando lontane, devono influenzare correttamente la distribuzione di probabilità dei token successivi e, quindi, la risposta finale.
+\end{enumerate}
+
+Esistono compiti NLP tradizionali che richiedono dipendenze a lunga distanza, ma nei \emph{long-context LLMs} tali distanze possono essere molto maggiori: decine o centinaia di migliaia di token. Per questo motivo sono necessari nuovi \emph{benchmark} e nuove metriche, capaci di distinguere la qualità linguistica locale dalla corretta gestione delle dipendenze globali.
+
+\begin{example}{Informazione distribuita in un documento}
+Un rapporto contiene all'inizio l'affermazione ``Il progetto Alfa utilizza il database Delta'' e, molte pagine dopo, la domanda ``Quale database usa il progetto Alfa?''. Un modello può scrivere risposte grammaticalmente perfette senza saper recuperare la prima affermazione. Per valutare il contesto lungo occorre controllare esplicitamente che risponda ``Delta'' e misurare cosa accade quando l'affermazione è spostata in posizioni differenti.
+\end{example}
+
+\newpage
+
+\section{Perplexity}
+
+\subsection{Dalla probabilità alla predizione delle parole}
+
+Un \emph{language model} assegna probabilità a possibili sequenze di token. Il termine \emph{token} indica un'unità di testo utilizzata dal modello: può corrispondere a una parola intera, a una sua parte o a un simbolo. Nelle slide si parla di \emph{words}, ma nei moderni LLM è spesso più appropriato ragionare in termini di token.
+
+Indicando con $w_1,\ldots,w_N$ i token di un testo, la probabilità della sequenza può essere scomposta con la regola della catena:
+\begin{equation}
+P(w_1,\ldots,w_N)=\prod_{i=1}^{N} P(w_i\mid w_1,\ldots,w_{i-1}).
+\end{equation}
+
+Questa identità significa che per assegnare una probabilità a un intero testo il modello può procedere un token alla volta: prima predice $w_1$, poi $w_2$ conoscendo $w_1$, poi $w_3$ conoscendo i primi due e così via.
+
+Per semplicità, nelle slide compare la notazione $P(w_i)$; nel caso autoregressivo, la quantità da considerare è invece la \emph{probabilità condizionata} del token effettivamente osservato, dato il suo prefisso:
+\begin{equation}
+p_i := P_\theta(w_i\mid w_{<i}), \qquad w_{<i}=(w_1,\ldots,w_{i-1}).
+\end{equation}
+
+Il pedice $\theta$ indica i parametri del modello. La probabilità $p_i$ \emph{non} è la probabilità della parola più probabile proposta dal modello: è la probabilità attribuita alla parola \emph{che compare realmente} nel testo di valutazione.
+
+\begin{example}{Predire il token successivo}
+Consideriamo il prefisso ``Il gatto dorme sul''. Un modello assegna:
+\begin{itemize}
+    \item $P(\text{``divano''}\mid\text{prefisso})=0.50$;
+    \item $P(\text{``tetto''}\mid\text{prefisso})=0.30$;
+    \item $P(\text{``prato''}\mid\text{prefisso})=0.20$.
+\end{itemize}
+Se nel testo di test la continuazione effettiva è ``divano'', la probabilità usata per valutare quella predizione è $0.50$. Se la continuazione effettiva fosse ``prato'', sarebbe $0.20$. A parità delle altre condizioni, assegnare una probabilità più alta al token corretto significa effettuare una predizione migliore.
+\end{example}
+
+\subsection{Informazione associata a un evento}
+
+\begin{definition}{Self-information o surprisal}
+Per un evento $x$ con probabilità $P(x)>0$, la quantità di informazione associata alla sua osservazione, misurata in bit, è
+\begin{equation}
+I(x)=-\log_2 P(x).
+\end{equation}
+\end{definition}
+
+La funzione logaritmica traduce la probabilità in una misura di \emph{sorpresa}: un evento quasi certo porta poca informazione, mentre un evento raro ne porta molta. Infatti:
+\begin{align}
+P(x)=1 &\quad\Longrightarrow\quad I(x)=-\log_2 1=0,\\
+P(x)=\tfrac12 &\quad\Longrightarrow\quad I(x)=1\ \text{bit},\\
+P(x)=\tfrac14 &\quad\Longrightarrow\quad I(x)=2\ \text{bit},\\
+P(x)=\tfrac18 &\quad\Longrightarrow\quad I(x)=3\ \text{bit}.
+\end{align}
+
+Si usa il segno meno perché $\log_2 p\leq 0$ per $0<p\leq1$: in questo modo l'informazione è non negativa. La base $2$ esprime il risultato in bit. Un evento con probabilità esattamente zero, se osservato, comporta una sorpresa infinita nel limite $p\to0^+$.
+
+\subsection{Entropia come informazione media}
+
+\begin{definition}{Entropia di Shannon}
+Per una variabile aleatoria discreta $X$ con possibili valori $x$ e funzione di massa $p(x)$, l'entropia in bit è
+\begin{equation}
+H(X)=\mathbb{E}[I(X)]=-\sum_{x}p(x)\log_2 p(x),
+\end{equation}
+con la convenzione $0\log_2 0=0$.
+\end{definition}
+
+L'entropia è la \emph{media} delle informazioni associate ai possibili esiti, pesata secondo le rispettive probabilità. La \emph{self-information} valuta la sorpresa di un singolo esito; l'\emph{entropia} valuta invece l'incertezza media della distribuzione, prima dell'osservazione.
+
+\begin{example}{Moneta equilibrata e moneta sbilanciata}
+Per una moneta con probabilità $1/2$ per ciascun esito:
+\begin{align}
+H(X)&=-\left(\tfrac12\log_2\tfrac12+\tfrac12\log_2\tfrac12\right)\\
+&=-\left(-\tfrac12-\tfrac12\right)=1\ \text{bit}.
+\end{align}
+Per una moneta che dà testa con probabilità $0.9$ e croce con probabilità $0.1$:
+\begin{align}
+H(X)&=-0.9\log_2 0.9-0.1\log_2 0.1\\
+&\approx 0.137+0.332=0.469\ \text{bit}.
+\end{align}
+Quando il risultato è sempre testa, si ha
+\begin{equation}
+H(X)=-1\log_2 1-0\log_2 0=0\ \text{bit}.
+\end{equation}
+Il valore zero non significa che il risultato non viene osservato, ma che l'osservazione non elimina alcuna incertezza: l'esito era già noto. Il valore $0.469$ bit indica l'informazione \emph{media} per osservazione, non che ogni esito fornisca precisamente $0.469$ bit.
+\end{example}
+
+\subsection{Dall'informazione alla cross-entropy}
+
+Supponiamo che i dati di test siano generati da una distribuzione reale $q$, mentre il modello utilizzi una distribuzione predittiva $p_\theta$. In generale queste due distribuzioni non coincidono.
+
+\begin{definition}{Cross-entropy}
+La \emph{cross-entropy} tra una distribuzione di riferimento $q$ e una distribuzione predittiva $p$ è
+\begin{equation}
+H(q,p)=-\sum_x q(x)\log_2 p(x).
+\end{equation}
+\end{definition}
+
+L'entropia $H(q)$ descrive l'incertezza intrinseca della distribuzione dei dati; la cross-entropy $H(q,p)$ descrive il costo informativo medio quando si usa il modello $p$ per prevedere dati estratti da $q$. Quando il modello coincide con la distribuzione reale, $H(q,p)=H(q)$. Più in generale:
+\begin{equation}
+H(q,p)=H(q)+D_{\mathrm{KL}}(q\Vert p),
+\end{equation}
+dove
+\begin{equation}
+D_{\mathrm{KL}}(q\Vert p)=\sum_xq(x)\log_2\frac{q(x)}{p(x)}\geq0
+\end{equation}
+è la divergenza di Kullback--Leibler (quando le espressioni sono definite). Questa relazione chiarisce perché una distribuzione predittiva che si discosta da quella dei dati paga, mediamente, un costo maggiore.
+
+Su un insieme di test costituito da $N$ token, la cross-entropy empirica del modello viene stimata attraverso
+\begin{equation}
+\widehat H_{\mathrm{test}}=-\frac1N\sum_{i=1}^{N}\log_2 P_\theta(w_i\mid w_{<i}).
+\end{equation}
+
+Si procede quindi nel modo seguente: si legge il token effettivo $w_i$, si recupera la probabilità che il modello gli ha assegnato, se ne calcola il logaritmo, si sommano i contributi e si divide per il numero di token.
+
+\subsection{Definizione e derivazione della perplexity}
+
+\begin{definition}{Perplexity}
+La \emph{perplexity} (PPL) è una misura della qualità predittiva di un modello probabilistico su un insieme di test. Per $N$ token, nelle convenzioni autoregressive, è definita da
+\begin{equation}\label{eq:ppl}
+\boxed{\operatorname{PPL}(P_\theta)=2^{-\frac1N\sum_{i=1}^{N}\log_2 P_\theta(w_i\mid w_{<i})}}.
+\end{equation}
+Equivalentemente, indicando con $\widehat H_{\mathrm{test}}$ la cross-entropy empirica in bit per token,
+\begin{equation}
+\boxed{\operatorname{PPL}=2^{\widehat H_{\mathrm{test}}}}.
+\end{equation}
+\end{definition}
+
+La formula riportata nelle slide ha la forma $2^{-\frac1N\sum_i\log_2 P(w_i)}$: abbiamo qui reso esplicito che le probabilità dei token sono normalmente \emph{condizionate al contesto precedente}.
+
+La derivazione si ottiene osservando che la quantità media di sorpresa sui token effettivi è
+\begin{equation}
+\widehat H_{\mathrm{test}}=\frac1N\sum_{i=1}^{N}\left[-\log_2 p_i\right].
+\end{equation}
+Elevando $2$ a questo valore:
+\begin{align}
+\operatorname{PPL}
+&=2^{\widehat H_{\mathrm{test}}}\\
+&=2^{-\frac1N\sum_{i=1}^{N}\log_2 p_i}\\
+&=\prod_{i=1}^{N}2^{-\frac1N\log_2 p_i}\\
+&=\prod_{i=1}^{N}p_i^{-1/N}\\
+&=\left(\prod_{i=1}^{N}\frac1{p_i}\right)^{1/N}.
+\end{align}
+
+Dunque la perplexity è \emph{la media geometrica degli inversi delle probabilità assegnate ai token corretti}. Con logaritmi naturali la stessa metrica può essere scritta come
+\begin{equation}
+\operatorname{PPL}=\exp\left(-\frac1N\sum_{i=1}^{N}\ln p_i\right).
+\end{equation}
+Le due formule coincidono: cambia la base del logaritmo e si usa l'esponenziale corrispondente.
+
+\subsection{Significato intuitivo: quante alternative plausibili?}
+
+Se, a ogni passo, un modello assegna probabilità uniforme $1/K$ a esattamente $K$ possibilità e il token corretto è una di esse, allora:
+\begin{align}
+\operatorname{PPL}
+&=2^{-\log_2(1/K)}\\
+&=2^{\log_2 K}=K.
+\end{align}
+
+Per questo si dice, \emph{in termini intuitivi}, che una perplexity pari a $K$ corrisponde a un'incertezza predittiva paragonabile a una scelta uniforme fra $K$ alternative. \textbf{Attenzione}: nella pratica la distribuzione non è uniforme e la perplexity non rappresenta necessariamente il numero letterale di parole candidate; rappresenta una misura esponenziale dell'incertezza predittiva media sui dati di test.
+
+Ne segue che, a parità di corpus, tokenizzazione e protocollo di calcolo, \textbf{una perplexity più bassa indica una migliore capacità di attribuire probabilità elevate ai token realmente osservati}. Il valore minimo è $1$, quando ogni token corretto riceve probabilità $1$; la metrica può invece aumentare senza limite se una probabilità assegnata ai token corretti tende a zero.
+
+\subsection{Esempi numerici svolti}
+
+\begin{example}{Un singolo token}
+Supponiamo che la parola effettiva sia ``casa'' e che il modello le assegni probabilità $P(\text{casa}\mid\text{contesto})=0.25$. Con un solo token ($N=1$):
+\begin{align}
+\operatorname{PPL}
+&=2^{-\log_2(0.25)}\\
+&=2^{-(-2)}=4.
+\end{align}
+Se invece il modello assegna probabilità $0.5$, la perplexity diventa $2$; se assegna probabilità $1$, diventa $1$. Più probabilità viene attribuita al token corretto, minore è la perplexity.
+\end{example}
+
+\begin{example}{Tre token con probabilità diverse}
+Consideriamo un test di tre token effettivi a cui il modello assegna rispettivamente
+\begin{equation}
+p_1=\frac12,\qquad p_2=\frac14,\qquad p_3=\frac18.
+\end{equation}
+Calcoliamo prima la sorpresa di ciascun token:
+\begin{align}
+-\log_2 p_1&=1,\\
+-\log_2 p_2&=2,\\
+-\log_2 p_3&=3.
+\end{align}
+La cross-entropy empirica è
+\begin{equation}
+\widehat H_{\mathrm{test}}=\frac{1+2+3}{3}=2\ \text{bit/token}.
+\end{equation}
+Infine,
+\begin{equation}
+\boxed{\operatorname{PPL}=2^2=4}.
+\end{equation}
+Il valore $4$ non significa che per tutti i token esistano esattamente quattro alternative equiprobabili: le tre probabilità erano differenti. Esprime un livello medio di incertezza predittiva equivalente, nel senso appena discusso, a quattro alternative uniformi.
+\end{example}
+
+\begin{example}{Confronto fra due modelli sullo stesso test}
+Supponiamo che il test contenga due token. Il modello $A$ assegna ai token corretti le probabilità $0.5$ e $0.5$; il modello $B$ assegna $0.25$ e $0.25$.
+\begin{align}
+\operatorname{PPL}_A&=(0.5^{-1}\cdot0.5^{-1})^{1/2}=\sqrt4=2,\\
+\operatorname{PPL}_B&=(0.25^{-1}\cdot0.25^{-1})^{1/2}=\sqrt{16}=4.
+\end{align}
+Il modello $A$ predice meglio i token di questo specifico test, perché assegna loro probabilità superiori e ottiene perplexity inferiore.
+\end{example}
+
+\begin{example}{Una predizione molto errata pesa parecchio}
+Per due token siano $p_1=0.9$ e $p_2=0.01$. Allora
+\begin{equation}
+\operatorname{PPL}=(0.9^{-1}\cdot0.01^{-1})^{1/2}
+=\sqrt{\frac1{0.009}}\approx10.54.
+\end{equation}
+Anche se il primo token è previsto molto bene, il secondo ha una probabilità così bassa da far crescere notevolmente il valore finale. La metrica penalizza particolarmente i token corretti ai quali il modello attribuisce probabilità estremamente piccole.
+\end{example}
+
+\subsection{Interpretazione corretta e condizioni di confronto}
+
+La perplexity misura la \emph{qualità della previsione probabilistica}, non direttamente la comprensione semantica. È necessario confrontare valori calcolati sullo stesso insieme di test, con tokenizzazione coerente, stesso trattamento del contesto e stessa convenzione di normalizzazione. Una perplexity \emph{per token} può non essere direttamente confrontabile fra tokenizer diversi, perché il numero e la natura delle unità previste cambiano.
+
+La metrica può inoltre essere calcolata utilizzando un intero prefisso oppure limitando artificialmente la finestra di contesto. Di conseguenza, la parola ``locale'' usata nelle slide descrive soprattutto \emph{l'obiettivo di valutazione token-per-token}; non implica, in senso matematico, che il modello sia obbligato a usare soltanto i token immediatamente precedenti.
+
+\section{Perché la perplexity non è sufficiente per i contesti lunghi}
+
+\subsection{Predizione locale e comprensione globale}
+
+Le slide sottolineano che la perplexity tende a premiare regolarità linguistiche locali invece di valutare direttamente la comprensione globale di un documento. Le ragioni principali sono tre.
+
+\begin{enumerate}
+\item \textbf{Calcolo token per token.} La misura aggrega le probabilità dei token effettivi. Il suo bersaglio è la \emph{next-token prediction}, non la verifica autonoma che il significato di un intero documento sia stato ricostruito.
+\item \textbf{Assenza di obiettivi globali espliciti.} La formula non controlla direttamente se un modello sappia riassumere un testo, mantenere coerenza fra paragrafi o riconoscere strutture discorsive che coinvolgono sezioni distanti.
+\item \textbf{Preferenza per la fluidità superficiale.} Un modello può prevedere bene strutture grammaticali e collocazioni frequenti, producendo al tempo stesso contenuti superficiali, contraddittori o non fedeli ai fatti presentati nel documento.
+\end{enumerate}
+
+\begin{example}{``The cat sat on the ...''}
+L'esempio delle slide è la sequenza inglese ``The cat sat on the ...'', completata con ``mat''. Il modello può imparare che si tratta di una continuazione frequente e assegnarle una probabilità elevata. Questo comportamento riduce la perplexity, ma non dimostra che il modello sia in grado di mantenere lo stesso argomento e gli stessi fatti lungo un saggio di molte pagine.
+\end{example}
+
+In sintesi, la perplexity è utile soprattutto per misurare la prestazione nella previsione del token successivo ed è spesso correlata alla fluidità grammaticale. \emph{Da sola}, però, non valuta adeguatamente:
+\begin{itemize}
+\item la coerenza e la consistenza lungo grandi distanze;
+\item la correttezza fattuale;
+\item la gestione dei turni di dialogo (\emph{dialogue turn-taking});
+\item la pragmatica, ossia l'adeguatezza della risposta rispetto all'intento e alla situazione comunicativa;
+\item la capacità di recuperare informazioni remote e combinarle in ragionamenti complessi.
+\end{itemize}
+
+La distinzione fondamentale è quindi fra \emph{avere una buona previsione statistica dei token} e \emph{dimostrare comprensione e uso appropriato del contesto globale}. I due aspetti possono essere correlati, ma non coincidono.
+
+\section{Metriche tradizionali di valutazione}
+
+\subsection{Accuracy}
+
+\begin{definition}{Accuracy}
+L'\emph{accuracy} misura la proporzione di predizioni corrette sul numero totale di esempi:
+\begin{equation}
+\boxed{\operatorname{Accuracy}=\frac{\#\text{ predizioni corrette}}{\#\text{ esempi totali}}}.
+\end{equation}
+\end{definition}
+
+È appropriata per compiti con risposta oggettivamente verificabile, per esempio \emph{question answering} a risposta singola, scelta multipla o recupero di un fatto quando si valuta la correttezza della risposta finale. Se il modello risponde correttamente a $80$ domande su $100$, l'accuracy è $80/100=0.8$, ossia $80\%$. Può tuttavia risultare poco informativa in classificazioni fortemente sbilanciate.
+
+\subsection{Precision, Recall e F1-score}
+
+Per comprendere le metriche introduciamo quattro quantità nel caso di classificazione binaria rispetto alla classe positiva:
+\begin{itemize}
+\item $TP$ (\emph{true positives}): esempi positivi predetti correttamente come positivi;
+\item $FP$ (\emph{false positives}): esempi negativi predetti erroneamente come positivi;
+\item $FN$ (\emph{false negatives}): esempi positivi predetti erroneamente come negativi;
+\item $TN$ (\emph{true negatives}): esempi negativi predetti correttamente come negativi.
+\end{itemize}
+
+\begin{definition}{Precision}
+\begin{equation}
+\boxed{\operatorname{Precision}=\frac{TP}{TP+FP}}.
+\end{equation}
+La precision risponde alla domanda: \emph{fra tutti gli elementi dichiarati positivi dal sistema, quanti erano davvero positivi?}
+\end{definition}
+
+\begin{definition}{Recall}
+\begin{equation}
+\boxed{\operatorname{Recall}=\frac{TP}{TP+FN}}.
+\end{equation}
+Il recall risponde alla domanda: \emph{fra tutti gli elementi effettivamente positivi, quanti sono stati individuati?}
+\end{definition}
+
+\begin{definition}{F1-score}
+L'F1-score è la media armonica di precision e recall:
+\begin{equation}
+\boxed{F_1=2\frac{\operatorname{Precision}\cdot\operatorname{Recall}}{\operatorname{Precision}+\operatorname{Recall}}}
+=\frac{2TP}{2TP+FP+FN}.
+\end{equation}
+\end{definition}
+
+La media armonica è piccola quando uno dei due fattori è piccolo: per ottenere un F1 elevato occorre quindi bilanciare precision e recall. Quando i denominatori sono nulli occorre specificare la convenzione adottata dal protocollo di valutazione.
+
+\begin{example}{Classi sbilanciate e F1}
+Un sistema deve individuare informazioni rilevanti in un documento. Sono presenti $20$ elementi rilevanti; il modello ne restituisce $15$, dei quali $12$ corretti. Quindi:
+\begin{equation}
+TP=12,\qquad FP=3,\qquad FN=8.
+\end{equation}
+Otteniamo
+\begin{align}
+\operatorname{Precision}&=\frac{12}{15}=0.80,\\
+\operatorname{Recall}&=\frac{12}{20}=0.60,\\
+F_1&=2\frac{0.80\cdot0.60}{0.80+0.60}
+=\frac{0.96}{1.40}\approx0.686.
+\end{align}
+La precision alta segnala pochi falsi positivi fra gli elementi restituiti; il recall più basso mostra che il sistema ha perso una parte significativa degli elementi rilevanti.
+\end{example}
+
+\subsection{Exact Match (EM)}
+
+\begin{definition}{Exact Match}
+Per una predizione $\widehat y$ e una risposta di riferimento $y$, l'\emph{Exact Match} vale
+\begin{equation}
+\operatorname{EM}(\widehat y,y)=
+\begin{cases}
+1 & \text{se }\widehat y\text{ coincide esattamente con }y,\\
+0 & \text{altrimenti}.
+\end{cases}
+\end{equation}
+Il punteggio complessivo è la media degli EM sul dataset.
+\end{definition}
+
+Questa metrica è particolarmente trasparente per risposte univoche, identificatori, codici e brevi risposte fattuali. È però rigida rispetto a parafrasi equivalenti. Per esempio, ``Roma'' e ``La città di Roma'' hanno identico significato ma potrebbero non coincidere letteralmente; alcuni benchmark applicano una normalizzazione predefinita prima del confronto.
+
+\subsection{ROUGE: sovrapposizione con riassunti di riferimento}
+
+\begin{definition}{ROUGE}
+\emph{ROUGE} significa \emph{Recall-Oriented Understudy for Gisting Evaluation}. È una famiglia di metriche che confronta un testo generato automaticamente con uno o più testi di riferimento, spesso riassunti redatti da esseri umani, misurando la sovrapposizione lessicale e strutturale.
+\end{definition}
+
+Il termine \emph{understudy} proviene dal teatro e indica un sostituto dell'attore principale: ROUGE funziona come indicatore automatico che \emph{approssima} una valutazione umana. Il termine \emph{gisting} richiama la produzione del \emph{gist}, cioè del nucleo informativo o sintesi dei concetti principali.
+
+Un $n$-gramma è una sequenza contigua di $n$ token: un \emph{unigramma} contiene un token, un \emph{bigramma} due token consecutivi, e così via. Le varianti richiamate nelle slide sono:
+\begin{itemize}
+\item \textbf{ROUGE-1}: sovrapposizione tra unigrammi;
+\item \textbf{ROUGE-2}: sovrapposizione tra bigrammi;
+\item \textbf{ROUGE-L}: sovrapposizione basata sulla \emph{longest common subsequence} (LCS), la più lunga sottosequenza comune, non necessariamente contigua, che preserva l'ordine degli elementi.
+\end{itemize}
+
+Nella formulazione orientata al recall, ROUGE-$n$ è espresso come
+\begin{equation}
+\operatorname{ROUGE\text{-}n}_{R}
+=\frac{\sum_{g\in G_n}\min\{c_{\mathrm{cand}}(g),c_{\mathrm{ref}}(g)\}}
+{\sum_{g\in G_n}c_{\mathrm{ref}}(g)},
+\end{equation}
+dove $c_{\mathrm{cand}}(g)$ e $c_{\mathrm{ref}}(g)$ sono i conteggi dell'$n$-gramma $g$ rispettivamente nella risposta candidata e nel riferimento. La somma al numeratore conta le occorrenze corrispondenti, senza superare quelle presenti nel riferimento. In alcune implementazioni vengono riportate anche varianti basate su precision e F1.
+
+\begin{example}{ROUGE-1 e ROUGE-2}
+Consideriamo la sequenza di riferimento ``il gatto dorme sul divano'' e la sequenza generata ``il gatto dorme sul letto''. Entrambe hanno cinque unigrammi. Quattro sono comuni: ``il'', ``gatto'', ``dorme'', ``sul''. Il recall ROUGE-1 è
+\begin{equation}
+\operatorname{ROUGE\text{-}1}_R=\frac45=0.8.
+\end{equation}
+I bigrammi di riferimento sono ``il gatto'', ``gatto dorme'', ``dorme sul'', ``sul divano''. I primi tre compaiono anche nella risposta generata, quindi
+\begin{equation}
+\operatorname{ROUGE\text{-}2}_R=\frac34=0.75.
+\end{equation}
+I punteggi elevati mostrano una somiglianza lessicale considerevole, ma non garantiscono che ``letto'' e ``divano'' siano intercambiabili nel contenuto informativo richiesto.
+\end{example}
+
+Per ROUGE-L si individua una LCS fra le due sequenze. Se la sequenza di riferimento ha lunghezza $r$ e la LCS ha lunghezza $L$, un indicatore orientato al recall è $R_{\mathrm{LCS}}=L/r$. Le varie implementazioni di ROUGE-L possono inoltre combinare precision e recall della LCS.
+
+\subsection{BLEU: precision degli $n$-grammi}
+
+\begin{definition}{BLEU}
+\emph{BLEU} significa \emph{Bilingual Evaluation Understudy}. È una metrica di corrispondenza fra testo generato e riferimento basata principalmente sulla \emph{precision} degli $n$-grammi, con una penalizzazione per i testi eccessivamente brevi.
+\end{definition}
+
+La formula presente nelle slide è
+\begin{equation}\label{eq:bleu}
+\boxed{\operatorname{BLEU}=BP\cdot\exp\left(\sum_{n=1}^{N}w_n\log p_n\right)},
+\end{equation}
+dove:
+\begin{itemize}
+\item $p_n$ è la precision modificata degli $n$-grammi di lunghezza $n$;
+\item $w_n$ è il peso assegnato agli $n$-grammi di lunghezza $n$, tipicamente con $\sum_{n=1}^{N}w_n=1$;
+\item $BP$ è la \emph{brevity penalty}, che scoraggia output artificialmente brevi;
+\item $N$ è l'ordine massimo di $n$-gramma considerato nella metrica BLEU (da non confondere con il numero di token usato nella formula della perplexity).
+\end{itemize}
+
+La scelta comune nelle slide è $N=4$ e
+\begin{equation}
+w_1=w_2=w_3=w_4=\frac14,
+\end{equation}
+ossia si attribuisce uguale peso a unigrammi, bigrammi, trigrammi e quadrigrammi. BLEU è spesso utilizzata per traduzione automatica e anche per valutare testi riassuntivi.
+
+Una formulazione comune della precision modificata è
+\begin{equation}
+p_n=\frac{\sum_{g\in G_n}\min\{c_{\mathrm{cand}}(g),\,c_{\mathrm{ref}}(g)\}}
+{\sum_{g\in G_n}c_{\mathrm{cand}}(g)}.
+\end{equation}
+Se sono disponibili più riferimenti, il conteggio ammesso per ciascun $n$-gramma viene tipicamente limitato al massimo conteggio riscontrato fra essi.
+
+La \emph{brevity penalty}, in una definizione standard, è
+\begin{equation}
+BP=\begin{cases}
+1, & c>r,\\
+\exp(1-r/c), & 0<c\leq r,
+\end{cases}
+\end{equation}
+dove $c$ è la lunghezza della candidata e $r$ la lunghezza del riferimento scelto secondo il protocollo BLEU; nel caso $c=0$ il punteggio viene posto a zero. La formula della penalità è un approfondimento rispetto alle slide, che riportano $BP$ senza svilupparne l'espressione.
+
+\begin{example}{Perché BLEU richiede la brevity penalty}
+Il riferimento è ``il gatto dorme sul divano'', di lunghezza $r=5$. Il modello restituisce soltanto ``il gatto'', di lunghezza $c=2$. Per gli unigrammi proposti, entrambi corretti, la precision è $p_1=2/2=1$: senza una penalizzazione, una risposta incompleta potrebbe apparire eccellente. Invece
+\begin{equation}
+BP=\exp(1-5/2)=e^{-1.5}\approx0.223.
+\end{equation}
+Usando esclusivamente BLEU-1, con $w_1=1$, si ottiene $\operatorname{BLEU\text{-}1}\approx0.223$. Il risultato penalizza correttamente la brevità. Non va confuso con BLEU-4: su una candidata di soli due token non esistono trigrammi o quadrigrammi, e l'esito dipende anche dalle convenzioni di smoothing e aggregazione adottate.
+\end{example}
+
+\subsection{ROUGE e BLEU: differenza concettuale}
+
+ROUGE, nell'interpretazione \emph{recall-oriented} evidenziata nelle slide, chiede \emph{quanta informazione lessicale presente nel riferimento sia stata coperta?} BLEU privilegia invece la domanda \emph{quanta parte di ciò che è stato generato coincide con il riferimento?}, aggiungendo una penalità per risposte troppo corte. Entrambe dipendono dalla sovrapposizione di $n$-grammi e possono attribuire punteggi modesti a parafrasi corrette oppure non riconoscere errori semantici nascosti dietro una forte somiglianza lessicale.
+
+\subsection{Valutazione mediante un altro LLM: LLM-as-a-Judge}
+
+\begin{definition}{LLM-as-a-Judge}
+Con \emph{LLM-as-a-Judge} si indica un protocollo nel quale un language model viene utilizzato come valutatore di risposte generate da un altro modello, assegnando punteggi o confrontando direttamente più risposte sulla base di criteri esplicitati nel prompt di valutazione.
+\end{definition}
+
+Questo approccio può valutare caratteristiche che non sono facilmente espresse da semplici conteggi lessicali:
+\begin{itemize}
+\item \textbf{Coherence}: il discorso è logico e ben collegato?
+\item \textbf{Factuality}: le affermazioni sono fattualmente corrette?
+\item \textbf{Faithfulness}: la risposta resta fedele ai documenti o alle fonti fornite, evitando dettagli non giustificati?
+\item \textbf{Style}: il registro e l'organizzazione del testo sono appropriati al compito?
+\end{itemize}
+
+Si tratta di una soluzione sempre più diffusa nella valutazione di task \emph{open-ended} su contesti lunghi, dove non esiste una singola risposta testuale esatta. Un possibile protocollo consiste nel fornire al valutatore il testo di riferimento, la richiesta, la risposta del sistema e una \emph{rubric} che descriva come assegnare un punteggio da $1$ a $5$ per la fedeltà. L'LLM restituisce il voto e una giustificazione.
+
+\textbf{Precisazione metodologica}: questo approccio non è automaticamente oggettivo. Il valutatore può essere influenzato dalla formulazione del prompt, dalla lunghezza della risposta, dall'ordine delle candidate e dai propri errori. Per risultati più affidabili si possono usare criteri espliciti, controlli umani, confronti in ordine variato e più valutatori. Questi accorgimenti ampliano il contenuto sintetico delle slide.
+
+\section{Sfide specifiche della valutazione di contesti lunghi}
+
+\subsection{Recall a distanza e degradazione con la lunghezza}
+
+Le domande fondamentali delle slide sono:
+\begin{enumerate}
+\item Quanto bene il modello riesce a \emph{ricordare} e utilizzare informazioni presenti molto lontano dalla domanda?
+\item Le prestazioni si deteriorano in modo progressivo e controllato all'aumentare della lunghezza del contesto, oppure presentano cali bruschi?
+\end{enumerate}
+
+Le metriche standard basate, per esempio, sulla perplexity, riflettono in larga misura la predizione locale. Occorre invece testare direttamente i fenomeni tipici dei contesti estesi. La costruzione di benchmark adeguati presenta inoltre tre difficoltà: definire una \emph{ground truth} attendibile per dipendenze lontane, sostenere costi computazionali più elevati e disporre di dataset esplicitamente progettati per lunghe finestre contestuali.
+
+\subsection{Tre capacità da verificare}
+
+\begin{enumerate}
+\item \textbf{Recall}: recuperare informazioni collocate molti token prima della domanda. Il successo richiede che i fatti remoti rimangano accessibili.
+\item \textbf{Inference}: sintetizzare e analizzare informazioni distribuite in documenti lunghi. Non basta citare due passaggi corretti: occorre collegarli per dedurne una conclusione.
+\item \textbf{Coherence}: mantenere la consistenza dell'output attraverso un discorso articolato, evitando contraddizioni e cambiamenti immotivati di tema, terminologia o conclusione.
+\end{enumerate}
+
+\begin{example}{Recall contro inference}
+All'inizio di un rapporto è riportato ``Il progetto A costa 20 milioni''. In fondo compare ``Il progetto B costa 15 milioni''. La domanda ``Quanto costa A?'' richiede \emph{recall}. La domanda ``Qual è il progetto meno costoso, e di quanto?'' richiede \emph{inference} fra due informazioni distanti: B costa 5 milioni in meno. Se il modello svolge correttamente il calcolo ma attribuisce altrove un costo diverso ad A, mostra un difetto di \emph{coherence}.
+\end{example}
+
+\subsection{Perché servono metriche specializzate}
+
+Due modelli potrebbero avere F1 o perplexity simili, pur differendo profondamente nella capacità di sfruttare token remoti. Le metriche specializzate devono aiutare a verificare se un modello sia in grado di:
+\begin{itemize}
+\item recuperare informazioni lontane (\emph{distant retrieval});
+\item conservare e aggiornare nella rappresentazione contestuale le informazioni rilevanti (\emph{maintain relevant memories});
+\item evitare un eccessivo affidamento alle informazioni più recenti (\emph{recency bias});
+\item evitare distorsioni legate alla posizione dei fatti nel testo (\emph{position bias}).
+\end{itemize}
+
+Una \emph{recency bias} è una preferenza sistematica per quanto appare più vicino alla fine del contesto. Una \emph{position bias} è una dipendenza sistematica delle prestazioni dalla collocazione dell'informazione, che può riguardare anche altre posizioni. La conclusione è che un risultato globale medio non basta: serve studiare come cambino le prestazioni al variare della posizione e della distanza.
+
+\section{Compiti closed-ended e open-ended}
+
+\subsection{La distinzione fondamentale}
+
+Per progettare benchmark equi e informativi, le slide separano le prove in due categorie.
+
+\begin{definition}{Closed-ended task}
+Un \emph{closed-ended task} è un compito per il quale esiste una risposta corretta unica oppure oggettivamente verificabile. Si presta a criteri di correzione chiari e facilmente automatizzabili.
+\end{definition}
+
+I closed-ended task mirano a valutare \emph{retrieval}, accuratezza fattuale e ragionamento su un lungo contesto. Gli esempi proposti nelle slide sono:
+\begin{itemize}
+\item \textbf{Needle-in-a-Haystack retrieval}: localizzare un fatto specifico in un testo che può superare $100\,000$ token;
+\item \textbf{Multiple-choice QA}: rispondere a domande a scelta multipla su documenti molto lunghi;
+\item \textbf{Fact recall}: ricordare un'informazione esplicitamente contenuta nel materiale;
+\item \textbf{Entity linking}: collegare una menzione all'entità corretta, eventualmente disambiguando riferimenti distribuiti nel documento.
+\end{itemize}
+
+Le principali metriche menzionate per questi compiti sono Accuracy, F1 ed Exact Match. I vantaggi sono \textbf{oggettività} e \textbf{riproducibilità}; il limite è che spesso non misurano adeguatamente la ricchezza di ragionamento richiesta da compiti genuinamente generativi.
+
+\begin{definition}{Open-ended task}
+Un \emph{open-ended task} richiede una risposta libera e generativa, per la quale non esiste normalmente una sola formulazione corretta. La valutazione deve quindi considerare qualità più articolate rispetto alla semplice corrispondenza con una stringa.
+\end{definition}
+
+Questi compiti verificano comprensione, sintesi e ragionamento esteso. Gli esempi delle slide includono:
+\begin{itemize}
+\item riassumere un rapporto di cento pagine;
+\item sintetizzare e confrontare argomenti presenti in più articoli scientifici;
+\item continuare coerentemente una lunga narrazione o discussione.
+\end{itemize}
+
+La valutazione può essere eseguita tramite giudizio umano, ROUGE, BLEU o LLM-as-a-Judge. Il vantaggio consiste nella capacità di esaminare \textbf{profondità, sintesi e creatività}; lo svantaggio è la maggiore difficoltà di \textbf{automazione e standardizzazione}.
+
+\begin{example}{Stesso documento, due tipi di domanda}
+Dopo la lettura di un articolo di cinquanta pagine:
+\begin{itemize}
+\item ``Qual è l'anno di pubblicazione riportato a pagina 3?'' è una domanda \emph{closed-ended};
+\item ``Riassumi le conclusioni e confrontale con le ipotesi dell'introduzione'' è una domanda \emph{open-ended}.
+\end{itemize}
+La prima ammette una risposta verificabile con Exact Match; la seconda richiede di giudicare copertura dei contenuti, fedeltà e coerenza dell'argomentazione.
+\end{example}
+
+\section{Metriche di retrieval, distanza e posizione della risposta}
+
+\subsection{Retrieval Accuracy e Recall@k}
+
+La valutazione di un compito di \emph{retrieval} chiede se il sistema riesca a recuperare lo \emph{span} o il passaggio corretto da un documento lungo. Uno \emph{span} è una porzione continua del testo, per esempio la frase che contiene la risposta. Le slide citano \emph{Retrieval Accuracy / R@k}, oltre a MRR e Precision@k.
+
+\begin{definition}{Recall@k}
+Per una query $q$, sia $G_q$ l'insieme dei documenti o passaggi rilevanti e sia $T_k(q)$ l'insieme dei primi $k$ elementi restituiti. Il recall ai primi $k$ risultati è
+\begin{equation}
+\operatorname{Recall@k}(q)=\frac{|G_q\cap T_k(q)|}{|G_q|},\qquad |G_q|>0.
+\end{equation}
+Su molte query si può utilizzare la media dei recall individuali.
+\end{definition}
+
+Nel caso particolare di \emph{una sola risposta rilevante per domanda}, il Recall@k assume soltanto i valori zero o uno: vale uno se il passaggio corretto compare nei primi $k$ risultati, zero altrimenti. Mediando sulle query si ottiene anche una misura di \emph{success@k} o \emph{hit rate@k}, che in tale configurazione coincide con il Recall@k medio.
+
+\begin{definition}{Precision@k}
+\begin{equation}
+\operatorname{Precision@k}(q)=\frac{|G_q\cap T_k(q)|}{k}.
+\end{equation}
+Misura la frazione di elementi rilevanti fra i primi $k$ risultati restituiti.
+\end{definition}
+
+\begin{definition}{Mean Reciprocal Rank (MRR)}
+Se $r_q$ è la posizione, a partire da $1$, del primo elemento rilevante restituito per la query $q$, il \emph{reciprocal rank} è $1/r_q$ (oppure $0$ se non ne è stato trovato alcuno). Su $Q$ query:
+\begin{equation}
+\operatorname{MRR}=\frac1Q\sum_{q=1}^{Q}\frac1{r_q}.
+\end{equation}
+\end{definition}
+
+\begin{example}{Retrieval nei primi risultati}
+I cinque passaggi restituiti per una domanda sono, nell'ordine: non rilevante, non rilevante, rilevante, non rilevante, rilevante. Supponiamo che in tutto vi siano due passaggi rilevanti. Allora:
+\begin{align}
+\operatorname{Recall@3}&=\frac12=0.5,\\
+\operatorname{Precision@3}&=\frac13\approx0.333,\\
+\operatorname{ReciprocalRank}&=\frac13.
+\end{align}
+Ai primi cinque risultati il recall salirebbe a $2/2=1$, mentre la precision sarebbe $2/5=0.4$. L'MRR premia il recupero tempestivo del primo risultato corretto, mentre Recall@k descrive la copertura dei passaggi rilevanti.
+\end{example}
+
+\subsection{Answer Distance}
+
+\begin{definition}{Answer Distance}
+La \emph{answer distance} misura la distanza, in numero di token, fra il punto in cui si trova l'informazione necessaria e il punto del contesto dal quale viene formulata la domanda o effettuata la previsione. Permette di studiare la capacità del modello di utilizzare informazioni lontane.
+\end{definition}
+
+Le slide introducono questo concetto verbalmente, senza fissare una formula univoca. In una prova con la risposta in posizione $a$ e la domanda in posizione $q$, una possibile formalizzazione è
+\begin{equation}
+d=|q-a|.
+\end{equation}
+Se la domanda si trova alla fine dell'input, la misura può essere calcolata come distanza della risposta dalla fine della finestra. È importante che un benchmark dichiari precisamente quale convenzione utilizza, specialmente quando la risposta occupa più token.
+
+\begin{example}{Distanza dalla risposta}
+Una frase decisiva si trova intorno al token $2\,000$; la domanda viene posta dopo il token $80\,000$. Se si considerano come riferimenti questi due indici, la distanza è
+\begin{equation}
+d=80\,000-2\,000=78\,000\ \text{token}.
+\end{equation}
+Ripetendo lo stesso test con la frase decisiva più vicina alla domanda, è possibile verificare se l'accuratezza cambi in funzione della distanza.
+\end{example}
+
+\subsection{Answer Position Bias}
+
+\begin{definition}{Answer Position Bias}
+L'\emph{answer position bias} è una variazione sistematica della probabilità di rispondere correttamente in funzione della posizione in cui si trova, all'interno del contesto, l'informazione utile alla risposta.
+\end{definition}
+
+Un modello potrebbe preferire informazioni recenti, oppure comportarsi meglio in alcune aree del testo rispetto ad altre. Per misurare tale fenomeno si può collocare lo stesso fatto in posizioni diverse, lasciando il più possibile invariati gli altri elementi del test.
+
+Un indicatore di posizione normalizzata è, per esempio,
+\begin{equation}
+u=\frac{a}{L},\qquad 0\leq u\leq1,
+\end{equation}
+dove $a$ indica la posizione del fatto e $L$ il numero totale di token. Con $u\approx0$ la risposta è vicina all'inizio, con $u\approx0.5$ è nella parte centrale e con $u\approx1$ è vicina alla fine. Questa formalizzazione è un'aggiunta esplicativa alle slide: ciò che esse richiedono è \emph{misurare le prestazioni in funzione della posizione}.
+
+\section{Metriche di utilizzo del contesto}
+
+\subsection{Context Degradation Curve}
+
+\begin{definition}{Context Degradation Curve}
+Una \emph{context degradation curve} descrive come una misura di prestazione del modello, per esempio l'accuracy o la perplexity, vari al crescere della distanza in token dall'informazione necessaria al compito.
+\end{definition}
+
+Nel grafico menzionato dalle slide, l'asse orizzontale rappresenta la distanza in token dall'informazione rilevante e l'asse verticale una misura di prestazione. Se si usa l'accuracy, una diminuzione indica una degradazione; se si usa la perplexity, un aumento indica in genere una degradazione predittiva. È importante non confondere le direzioni di interpretazione delle due metriche.
+
+\begin{example}{Curva di degradazione: dati illustrativi}
+Supponiamo che, mantenendo costante il tipo di domanda, il modello ottenga:
+\begin{center}
+\begin{tabular}{r|r}
+\textbf{Distanza dal fatto} & \textbf{Accuracy} \\
+\hline
+$1\,000$ token & $95\%$ \\
+$10\,000$ token & $90\%$ \\
+$50\,000$ token & $72\%$ \\
+$100\,000$ token & $48\%$
+\end{tabular}
+\end{center}
+Tracciando questi punti si osserva che il successo nel recupero diminuisce con la distanza. I valori sono \emph{puramente illustrativi}: le slide descrivono il tipo di grafico, ma non forniscono una curva quantitativa da riprodurre.
+\end{example}
+
+La curva rende visibili i limiti della gestione delle dipendenze lontane. Una degradazione graduale è diversa da un crollo improvviso, e modelli con la medesima accuracy media possono presentare profili di decadimento differenti. Per una valutazione accurata si dovrebbero controllare anche lunghezza totale, posizione relativa del fatto e difficoltà della domanda.
+
+\subsection{Context Ablation Sensitivity}
+
+\begin{definition}{Context Ablation Sensitivity}
+La \emph{context ablation sensitivity} valuta quanto cambia il comportamento del modello quando vengono rimossi segmenti specifici dell'input. Serve a stimare quali parti del contesto abbiano contribuito effettivamente alla risposta.
+\end{definition}
+
+Una procedura di \emph{ablation} può seguire questi passaggi:
+\begin{enumerate}
+\item valutare il modello sul contesto completo e registrare il punteggio $S_{\mathrm{full}}$;
+\item rimuovere un segmento $C_j$ e sottoporre al modello lo stesso compito;
+\item registrare il nuovo punteggio $S_{-j}$;
+\item confrontare i punteggi e ripetere per segmenti differenti.
+\end{enumerate}
+
+Una possibile misura della sensibilità è
+\begin{equation}
+\Delta_j=S_{\mathrm{full}}-S_{-j},
+\end{equation}
+quando $S$ è una metrica in cui valori più alti sono migliori. Un grande $\Delta_j>0$ suggerisce che il segmento eliminato fosse utile per il compito. Se invece si usa la perplexity, dove valori più bassi sono migliori, è opportuno invertire la differenza oppure confrontare direttamente la variazione di perdita, dichiarandone il segno.
+
+\begin{example}{Rimozione di un'informazione decisiva}
+Un documento contiene la frase ``Il codice di accesso all'archivio è K72''. Il modello riceve la domanda ``Qual è il codice?''. Con il documento integrale l'accuracy su ripetizioni del test è $0.95$. Rimuovendo la frase diventa $0.20$; rimuovendo un paragrafo irrilevante rimane $0.94$.
+\begin{align}
+\Delta_{\mathrm{frase\ utile}}&=0.95-0.20=0.75,\\
+\Delta_{\mathrm{paragrafo\ irrilevante}}&=0.95-0.94=0.01.
+\end{align}
+Il test suggerisce che la frase sul codice era essenziale. Bisogna tuttavia ricordare che rimuovere un testo può cambiare anche lunghezza e struttura del prompt: il confronto non è una prova causale perfetta se questi fattori non vengono controllati.
+\end{example}
+
+\subsection{Extended Perplexity}
+
+Le slide propongono la \emph{extended perplexity} come adattamento della perplexity standard che renda visibile il contributo di segmenti di contesto lontani. Non viene specificata una formula universale: non bisogna quindi trattare il termine come se identificasse nelle slide una metrica definita in modo univoco.
+
+Una costruzione possibile, \emph{solo a scopo illustrativo}, consiste nel confrontare la perplexity della medesima sequenza da predire usando due quantità diverse di storia:
+\begin{align}
+\operatorname{PPL}_{\mathrm{full}}
+&=\exp\left(-\frac1N\sum_{i=1}^{N}\ln P_\theta(w_i\mid C_{\mathrm{full}},w_{<i})\right),\\
+\operatorname{PPL}_{\mathrm{short}}
+&=\exp\left(-\frac1N\sum_{i=1}^{N}\ln P_\theta(w_i\mid C_{\mathrm{short}},w_{<i})\right).
+\end{align}
+
+Qui $C_{\mathrm{full}}$ contiene anche informazioni lontane, mentre $C_{\mathrm{short}}$ le esclude. Possiamo esaminare il guadagno in perdita logaritmica:
+\begin{equation}
+\Delta H=\ln\operatorname{PPL}_{\mathrm{short}}-
+\ln\operatorname{PPL}_{\mathrm{full}}.
+\end{equation}
+
+Se $\Delta H>0$, l'aggiunta del contesto lungo riduce la perdita media di predizione e quindi risulta utile sul test. Il confronto isola meglio il \emph{valore aggiunto} del contesto distante rispetto alla sola perplexity calcolata sull'intera sequenza. Questa è una possibile operazionalizzazione coerente con l'intuizione delle slide, \textbf{non una formula ufficiale fornita dal materiale}.
+
+\section{Ulteriori metriche per contesti lunghi}
+
+\subsection{Memory Recall Accuracy}
+
+\begin{definition}{Memory Recall Accuracy}
+La \emph{memory recall accuracy} misura la proporzione di fatti conservati nel contesto che un modello riesce a richiamare correttamente quando riceve, spesso molto tempo dopo, una domanda mirata.
+\end{definition}
+
+È utile per compiti di richiamo fattuale a lunga distanza. Le slide suggeriscono l'impiego di benchmark sintetici, nei quali le dipendenze sono note e controllabili sperimentalmente.
+
+\begin{example}{Richiamo di fatti in un benchmark sintetico}
+Nel contesto vengono inserite venti associazioni arbitrarie, come ``oggetto Q17 $\rightarrow$ colore verde'', distanziate da numerosi paragrafi. Successivamente si chiede il colore di ciascun oggetto. Se il modello risponde correttamente a sedici richieste:
+\begin{equation}
+\operatorname{MemoryRecallAccuracy}=\frac{16}{20}=0.8.
+\end{equation}
+L'uso di associazioni arbitrarie riduce la possibilità che il modello risponda basandosi sulle proprie conoscenze generali, senza aver letto il contesto.
+\end{example}
+
+\subsection{Compression Ratio e Copying Ability}
+
+Le slide accostano due capacità: riprodurre fedelmente porzioni di un contesto esteso (\emph{copying ability}) e comprimerne il contenuto in un riassunto accurato (\emph{compression}).
+
+\begin{definition}{Compression Ratio}
+Un possibile rapporto di compressione, definito in termini di lunghezza, è
+\begin{equation}
+\operatorname{CompressionRatio}=\frac{L_{\mathrm{output}}}{L_{\mathrm{input}}},
+\end{equation}
+dove $L$ indica il numero di token. Un valore piccolo corrisponde a un riassunto molto breve rispetto al testo iniziale.
+\end{definition}
+
+Il rapporto di compressione, tuttavia, \emph{non misura da solo la qualità} del riassunto: un output vuoto o completamente scorretto potrebbe essere brevissimo. È necessario affiancargli misure di copertura informativa e fedeltà. La \emph{copying ability}, invece, può essere valutata chiedendo di riprodurre un passaggio specifico e misurando, per esempio, l'Exact Match. Le slide non fissano una formula particolare per queste capacità: quella indicata qui rappresenta una convenzione illustrativa da esplicitare nel benchmark.
+
+\begin{example}{Compressione fedele e infedele}
+Da un rapporto di $10\,000$ token viene prodotto un riassunto di $500$ token: il rapporto di compressione in questa convenzione è $500/10\,000=0.05$. Ma se il rapporto sosteneva che il progetto è stato annullato e il riassunto afferma che il progetto è stato approvato, il risultato non è fedele nonostante l'elevata compressione. Per questo servono metriche aggiuntive di correttezza e copertura.
+\end{example}
+
+\subsection{Hallucination Rate vs. Context Length}
+
+\begin{definition}{Hallucination Rate}
+In un compito fondato su documenti, una \emph{hallucination} è un'affermazione generata che non è supportata dal contesto, oppure è in contraddizione con esso. Una possibile \emph{hallucination rate} è
+\begin{equation}
+\operatorname{HR}(L)=\frac{\#\text{ affermazioni non supportate con contesto di lunghezza }L}
+{\#\text{ affermazioni valutate con contesto di lunghezza }L}.
+\end{equation}
+\end{definition}
+
+La relazione \emph{Hallucination Rate vs. Context Length}, citata nelle slide, consiste nello studiare come cambia la frequenza di affermazioni non supportate all'aumentare della lunghezza del contesto. Un aumento può segnalare difficoltà nel ricordare informazioni precedenti oppure un disallineamento tra la risposta e le fonti richieste. Anche in questo caso la formula mostrata è una possibile definizione operativa, non una formula esplicitata nelle slide.
+
+Per interpretare l'esperimento, bisogna controllare che i contesti di diverse lunghezze siano comparabili: aggiungere informazioni contraddittorie, per esempio, potrebbe aumentare la difficoltà del compito indipendentemente dalla distanza.
+
+\section{Principi generali di una valutazione affidabile}
+
+Le indicazioni conclusive delle slide possono essere condensate in tre principi fondamentali.
+
+\begin{enumerate}
+\item \textbf{Metriche sensibili alla distanza e al contesto}. Occorre sapere non soltanto \emph{se} una risposta è corretta, ma anche a quale distanza e in quale posizione si trovava l'informazione utilizzata.
+\item \textbf{Combinazione di metriche}. Nessun singolo indicatore misura insieme retrieval, inference, coerenza, qualità testuale, allucinazioni e resistenza all'aumento della lunghezza.
+\item \textbf{Nuovi benchmark diagnostici}. I protocolli emergenti includono metriche dipendenti dalla posizione, tassi di successo nel recupero e andamenti della degradazione al variare della distanza.
+\end{enumerate}
+
+Un modello potrebbe infatti ottenere una buona accuracy su domande localizzate alla fine del testo, ma fallire quando i fatti vengono spostati nella prima metà; potrebbe recuperare bene singole frasi, ma combinare male informazioni remote; oppure potrebbe mantenere buona fluidità grammaticale generando contraddizioni. Solo valutazioni complementari rendono visibili queste differenze.
+
+\section{Approcci sperimentali alla long-context evaluation}
+
+\subsection{Synthetic Benchmarks}
+
+\begin{definition}{Synthetic Benchmark}
+Un \emph{synthetic benchmark} è un insieme di prove costruite artificialmente in modo da conoscere in anticipo le risposte corrette e controllare specifiche variabili sperimentali, come la distanza fra un fatto e la sua domanda.
+\end{definition}
+
+Le slide descrivono prompt progettati con risposte note e collocate a distanze differenti. Lo scopo è realizzare esperimenti controllati, nei quali l'effetto della posizione o della lunghezza possa essere isolato. Per esempio, si può generare un documento di $100\,000$ token contenente una sola coppia codice--oggetto e ripetere la prova spostando la coppia in varie posizioni.
+
+Il vantaggio principale è la controllabilità; la limitazione è il possibile divario rispetto ai testi e alle richieste del mondo reale.
+
+\subsection{Needle-in-a-Haystack (NIAH)}
+
+\begin{definition}{Needle-in-a-Haystack}
+Il test \emph{Needle-in-a-Haystack} (NIAH) consiste nell'inserire una o più informazioni note (\emph{needles}, ``aghi'') all'interno di un contesto lungo e ricco di contenuti non direttamente rilevanti (\emph{haystack}, ``pagliaio''). Il modello deve recuperare o generare correttamente l'informazione richiesta.
+\end{definition}
+
+Un protocollo tipico prevede:
+\begin{enumerate}
+\item costruire o selezionare un testo di sfondo lungo;
+\item introdurre un fatto noto in una posizione scelta;
+\item formulare una domanda la cui risposta richieda quel fatto;
+\item misurare se la risposta restituita è corretta;
+\item ripetere variando la lunghezza del contesto e la posizione dell'informazione.
+\end{enumerate}
+
+\begin{example}{Un ago in un contesto di molte pagine}
+Si inserisce, in mezzo a un rapporto, la frase ``La parola d'ordine del laboratorio è ZAFIRO-41''. Il resto del testo non contiene la parola d'ordine. Alla fine si chiede ``Qual è la parola d'ordine del laboratorio?''. L'esperimento riesce se il modello risponde ``ZAFIRO-41''. Spostando la frase all'inizio, a metà e alla fine del contesto si osserva l'eventuale \emph{position bias}; cambiando la lunghezza del rapporto si studia la capacità di retrieval su distanze crescenti.
+\end{example}
+
+Un NIAH semplice misura soprattutto il \emph{recupero} di un'informazione isolata; non dimostra necessariamente capacità di ragionamento, sintesi, comprensione narrativa o integrazione di più fatti. Per analizzare queste competenze occorrono compiti più complessi.
+
+\subsection{Real-World Question Answering e Summarization}
+
+Questo approccio usa documenti lunghi autentici, come libri, relazioni o trascrizioni, accompagnati da domande realistiche. In questo modo è possibile misurare non soltanto il recupero di fatti, ma anche il ragionamento e la sintesi.
+
+\begin{example}{Analisi di verbali reali}
+Un modello riceve la trascrizione di una lunga riunione e deve individuare la decisione finale su un investimento, distinguendola dalle proposte formulate e poi scartate. La prova richiede di recuperare passaggi distanti e di interpretarli correttamente. Per la valutazione si possono combinare un controllo fattuale dei contenuti, un giudizio umano di fedeltà e un punteggio di completezza.
+\end{example}
+
+Rispetto ai benchmark sintetici, gli scenari reali coprono una gamma più ampia di difficoltà, ma è spesso più complicato stabilire una ground truth unica e separare gli effetti delle diverse variabili sperimentali.
+
+\subsection{Truncation Analysis ed effective context window}
+
+\begin{definition}{Truncation Analysis}
+La \emph{truncation analysis} consiste nel tagliare l'input a lunghezze differenti e confrontare la prestazione del modello. Serve a studiare quanta parte del contesto disponibile viene realmente sfruttata per il compito.
+\end{definition}
+
+Supponiamo di avere un testo di lunghezza $L$ e di valutare il modello con prefissi o porzioni di lunghezza $\ell_1,\ell_2,\ldots,\ell_m$, dove $\ell_j\leq L$. Per ogni lunghezza si misura una prestazione $S(\ell_j)$. La dipendenza funzionale
+\begin{equation}
+\ell\longmapsto S(\ell)
+\end{equation}
+permette di osservare se l'accesso a un contesto maggiore migliori realmente i risultati e in quali condizioni.
+
+\begin{definition}{Effective Context Window}
+L'\emph{effective context window} è, in senso operativo, l'estensione del contesto che un modello riesce a sfruttare in modo utile e affidabile per il task considerato. Non coincide necessariamente con il limite massimo di token che l'architettura accetta in input.
+\end{definition}
+
+\begin{example}{Finestra nominale e finestra effettiva}
+Un modello accetta tecnicamente fino a $128\,000$ token. In un esperimento di domanda-risposta, tuttavia, le sue prestazioni migliorano fino a $32\,000$ token e poi rimangono invariate oppure peggiorano. La finestra nominale resta $128\,000$, ma la regione di utilizzo effettivamente vantaggioso, \emph{per quel test}, può essere molto più limitata. Non è possibile attribuire un'unica finestra effettiva assoluta senza specificare task, dataset e criterio di prestazione.
+\end{example}
+
+\textbf{Cautela}: tagliare un documento può eliminare proprio l'informazione necessaria a rispondere. Una diminuzione dell'accuracy in quel caso è attesa e non prova che il modello non sia capace di utilizzare un contesto lungo. Occorre progettare il confronto in modo da distinguere \emph{assenza di informazioni rilevanti} e \emph{incapacità di utilizzare informazioni presenti}.
+
+\section{Sfide aperte e questioni di ricerca}
+
+\subsection{Compromesso fra lunghezza del contesto e costo computazionale}
+
+L'allungamento del contesto aumenta il costo della valutazione, in termini di memoria, tempo e risorse di calcolo. Le slide evidenziano il \emph{trade-off} fra lunghezza gestita e spesa computazionale. Più una prova utilizza documenti lunghi e molte ripetizioni, più diventa oneroso misurare in modo attendibile le prestazioni a diverse distanze e posizioni.
+
+Dal punto di vista implementativo, il costo preciso dipende dall'architettura del modello, dagli algoritmi di attenzione e dalle ottimizzazioni impiegate: non è corretto imporre una sola legge di crescita a tutti i sistemi. Il principio generale rimane che test lunghi e completi richiedono più risorse rispetto a test brevi.
+
+\subsection{Distinguere comprensione e memorizzazione}
+
+Un modello può rispondere correttamente perché ha recuperato una stringa identica da un punto del testo, senza dimostrare di aver compreso le relazioni semantiche sottostanti. La differenza emerge chiedendo ragionamenti, confronti, deduzioni o riformulazioni che richiedano l'integrazione di informazioni distribuite.
+
+Per esempio, ripetere esattamente il prezzo del progetto A è una prova di recall; stabilire quale progetto ha il miglior rapporto fra costi e benefici, utilizzando valori e vincoli presenti in sezioni diverse, richiede operazioni più complesse. Anche tali prove devono evitare indizi che consentano risposte corrette senza effettiva lettura del contesto.
+
+\subsection{Limiti del realismo dei benchmark}
+
+Molti benchmark sono costruiti con informazioni artificiali, testi semplificati o risposte isolate e non riflettono completamente la complessità delle richieste autentiche: documenti contraddittori, riferimenti impliciti, fonti eterogenee, rumore, esigenze di sintesi e ambiguità. Per questo non basta ottenere ottimi risultati su un benchmark sintetico per affermare che un modello gestisca ogni scenario reale con lo stesso livello di affidabilità.
+
+\subsection{Standardizzazione ancora in evoluzione}
+
+Le slide concludono che la standardizzazione dei dataset e dei protocolli di valutazione è ancora in evoluzione. Per rendere i risultati confrontabili è necessario esplicitare: il dataset, la tokenizzazione, le lunghezze testate, il posizionamento dei fatti, la definizione di risposta corretta, la metrica scelta, l'eventuale giudice LLM e il modo in cui i risultati vengono aggregati.
+
+\section{Sintesi finale: come scegliere la valutazione}
+
+\begin{center}
+\begin{tabular}{p{0.25\textwidth}|p{0.30\textwidth}|p{0.33\textwidth}}
+\textbf{Capacità studiata} & \textbf{Metriche o approcci} & \textbf{Che cosa rivelano} \\
+\hline
+Predizione dei token & Perplexity, cross-entropy & Quanto il modello considera probabili i token osservati \\
+Recupero di fatti & Accuracy, EM, Recall@k, MRR & Se e quanto presto viene trovata la risposta \\
+Copertura della risposta & Precision, Recall, F1 & Errori di omissione e inclusione \\
+Riassunti e generazione & ROUGE, BLEU, giudizio umano, LLM-as-a-Judge & Somiglianza al riferimento e qualità dell'output \\
+Uso di informazioni distanti & Answer distance, position bias, degradation curve & Dipendenza delle prestazioni da distanza e posizione \\
+Utilizzo delle parti del testo & Context ablation, extended perplexity & Quali segmenti modificano effettivamente l'output \\
+Memoria e fedeltà & Memory recall, copying, hallucination rate & Richiamo di fatti e rischio di contenuti non supportati \\
+Capacità su diversi input & NIAH, benchmark sintetici e reali, truncation analysis & Robustezza in scenari controllati e realistici
+\end{tabular}
+\end{center}
+
+\noindent\textbf{Conclusione fondamentale.} Un modello linguistico può avere una buona perplexity senza comprendere o utilizzare in modo affidabile un documento molto lungo. La perplexity resta una misura importante della previsione probabilistica, ma la valutazione dei \emph{long-context LLMs} richiede un insieme di prove complementari: retrieval di fatti distanti, ragionamento fra sezioni, qualità delle risposte generative, coerenza, sensibilità alla posizione e robustezza rispetto alla crescita del contesto. Solo combinando tali strumenti è possibile delineare in modo attendibile quali capacità del modello siano realmente disponibili e quali limitazioni persistano.
