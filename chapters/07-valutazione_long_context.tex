@@ -119,9 +119,13 @@ Il valore zero non significa che il risultato non viene osservato, ma che l'osse
 \end{example}
 
 \subsection{Dall'informazione alla cross-entropy}
-
-Supponiamo che i dati di test siano generati da una distribuzione reale $q$, mentre il modello utilizzi una distribuzione predittiva $p_\theta$. In generale queste due distribuzioni non coincidono.
-
+Sia $\mathcal{V} = \{v_1, v_2, \dots, v_{\vert{}\mathcal{V}\vert{}}\}$ l'insieme di tutti i token distinti presenti nel vocabolario (il dizionario).
+Se consideriamo l'evento "estrazione del prossimo token",possiamo definire una variabile aleatoria discreta $X$ che assume valori in $\mathcal{V}$:$$X: \Omega \to \mathcal{V}$$ (quindi idealmente ad ogni estrazione abbiamo variabile aleatorie diverse $X_1,X_2 \dots$)
+Le funzioni $q(x)$ e $p(x)$ sono le rispettive PMF definite sull'intero vocabolario $\mathcal{V}$, dove:
+\begin{itemize}
+    \item $q(x)$ (Distribuzione reale dei dati): È la vera PMF sottostante alla lingua naturale o alla sorgente dati. Rappresenta la probabilità oggettiva con cui la sorgente sceglie il token $x \in \mathcal{V}$.
+    \item $p(x)$ (Distribuzione del modello): È la PMF predetta dal modello.Assegna una massa di probabilità a ciascun token $x \in \mathcal{V}$.
+\end{itemize}
 \begin{definition}{Cross-entropy}
 La \emph{cross-entropy} tra una distribuzione di riferimento $q$ e una distribuzione predittiva $p$ è
 \begin{equation}
@@ -129,7 +133,48 @@ H(q,p)=-\sum_x q(x)\log_2 p(x).
 \end{equation}
 \end{definition}
 
-L'entropia $H(q)$ descrive l'incertezza intrinseca della distribuzione dei dati; la cross-entropy $H(q,p)$ descrive il costo informativo medio quando si usa il modello $p$ per prevedere dati estratti da $q$. Quando il modello coincide con la distribuzione reale, $H(q,p)=H(q)$. Più in generale:
+L'entropia $H(q)$ descrive l'incertezza intrinseca della distribuzione dei dati; 
+\\
+La cross-entropy $H(q,p)$ descrive il costo informativo medio quando si usa il modello $p$ per prevedere dati estratti da $q$.
+\begin{itemize}
+    \item $p(x)$ (Il modello) determina QUANTO ti sorprendi:
+La quantità $-\log_2 p(x)$ misura la sorpresa individuale per il singolo token $x$. Se il modello assegna probabilità alta a $x$, la sua sorpresa per quel token è piccola. Se gli assegna probabilità quasi zero, la sorpresa quando $x$ si presenta è enorme
+    \item $q(x)$ (La Realtà) determina QUANTO SPESSO ti sorprendi:
+La Natura (o il testo reale) estrae i token. La frequenza con cui il token $x$ compare davvero nella realtà è dettata esclusivamente da $q(x)$.
+\end{itemize}
+La Cross-Entropy $H(q,p)$ è la media ponderata della sorpresa:$$H(q, p) = \sum_{x \in \mathcal{V}} \underbrace{q(x)}_{\text{Frequenza reale}} \times \underbrace{\left(-\log_2 p(x)\right)}_{\text{Sorpresa del modello}}$$
+\begin{example}{Esempio}
+    Immaginiamo un vocabolario di sole 2 parole per completare la frase "Il gatto beve il...":$x_1 = \text{"latte"}$$x_2 = \text{"petrolio"}$
+    Nella realtà dei testi reali:
+    \begin{enumerate}
+        \item $q(\text{"latte"}) = 0.9$
+        \item $q(\text{"petrolio"}) = 0.1$
+    \end{enumerate}
+    \paragraph{Caso A : Modello ben addrestato ($p_A \approx q$)}
+    Il modello ha capito come va il mondo e assegna:
+    \begin{enumerate}
+        \item $p_A(\text{"latte"}) = 0.9 \implies \text{Sorpresa } -\log_2(0.9) \approx 0.152 \text{ bit}$
+        \item $p_A(\text{"petrolio"}) = 0.1 \implies \text{Sorpresa } -\log_2(0.1) \approx 3.322 \text{ bit}$
+    \end{enumerate}
+    Calcoliamo la sorpresa media (Cross-Entropy):$$H(q, p_A) = (0.9 \times 0.152) + (0.1 \times 3.322) = 0.137 + 0.332 = 0.469 \text{ bit}$$
+    \paragraph{Caso B : Modello totalmente sballato ($p_B$)}
+    Il modello ha capito come va il mondo e assegna:
+    \begin{enumerate}
+        \item $p_B(\text{"latte"}) = 0.1 \implies \text{Sorpresa } -\log_2(0.1) \approx 3.322 \text{ bit}$
+        \item $p_B(\text{"petrolio"}) = 0.9 \implies \text{Sorpresa } -\log_2(0.9) \approx 0.152 \text{ bit}$
+    \end{enumerate}
+    Calcoliamo la sorpresa media (Cross-Entropy):$$H(q, p_B) = (0.9 \times 3.322) + (0.1 \times 0.152) = 2.990 + 0.015 = 3.005 \text{ bit}$$
+
+    Il modello $p_B$ ha una sorpresa bassissima ($0.152\text{ bit}$) per la parola "petrolio". Ma nella realtà "petrolio" non esce quasi mai ($q=0.1$).Al contrario, la parola "latte" esce continuamente ($q=0.9$), e ogni singola volta che esce, il modello $p_B$ subisce uno shock enorme ($3.322\text{ bit}$) perché non se l'aspettava.Moltiplicando una sorpresa enorme ($3.322$) per una frequenza altissima ($0.9$), il costo medio della cross-entropy schizza alle stelle.
+\end{example}
+\begin{center}
+    $H(q,p)$ è la «sorpresa media» che il modello $p$ subisce di fronte alla realtà dei dati $q$.   
+\end{center}
+
+
+
+Quando la distribuzione del  modello coincide con la distribuzione reale si ha $H(q,p)=H(q)$. \\ 
+Più in generale:
 \begin{equation}
 H(q,p)=H(q)+D_{\mathrm{KL}}(q\Vert p),
 \end{equation}
@@ -138,14 +183,58 @@ dove
 D_{\mathrm{KL}}(q\Vert p)=\sum_xq(x)\log_2\frac{q(x)}{p(x)}\geq0
 \end{equation}
 è la divergenza di Kullback--Leibler (quando le espressioni sono definite). Questa relazione chiarisce perché una distribuzione predittiva che si discosta da quella dei dati paga, mediamente, un costo maggiore.
+\newpage
+Poiché nella realtà non conosciamo la forma analitica della vera PMF $q(x)$, non possiamo calcolare direttamente la sommatoria esplicita.
+Nella definizione generale di prima $q(x)$ e $p(x)$ sono scritte come PMF generiche (incondizionate) definite sul vocabolario $\mathcal{V}$. È la formalizzazione astratta e valida per qualsiasi problema di teoria dell'informazione o classificazione.
+Nel Language Modeling la lingua è un processo sequenziale in cui la probabilità della parola successiva dipende da ciò che è stato scritto prima. Per questo motivo, la PMF generica $p(x)$ viene concretizzata a ogni passo $i$ come la PMF condizionata $P_\theta(x \mid w_{<i})$. 
 
-Su un insieme di test costituito da $N$ token, la cross-entropy empirica del modello viene stimata attraverso
+
+Cioè formalmente, date $X_1,\dots,X_{i-1}$ variabili aleatorie di $X_i$, la pmf condizionata alle realizzazioni delle variabili aleatorie precedenti $X_1 = w_1, \dots, X_{i-1} = w_{i-1}$ si scrive come:
+$$P_\theta(X_i = w_i \mid X_1 = w_1, \dots, X_{i-1} = w_{i-1})$$
+\begin{observation}{}
+    Nota che tutte le variabile aletatorie singole avranno la loro pmf che le caratterizza.
+\end{observation}
+
+Su un \textbf{insieme di test costituito da $N$ token}, la cross-entropy empirica del modello viene stimata attraverso
 \begin{equation}
 \widehat H_{\mathrm{test}}=-\frac1N\sum_{i=1}^{N}\log_2 P_\theta(w_i\mid w_{<i}).
 \end{equation}
+$\hat{H}_{\text{test}}$ è la sorpresa media per token che il modello sperimenta durante la lettura dell'intero dataset di test.
+\begin{enumerate}
+    \item $-\log_2 P_\theta(w_i \mid w_{<i})$: La sorpresa puntuale sul singolo token $i$-esimo.
+    \item $\frac{1}{N}\sum_{i=1}^N$: La media aritmetica di questa sorpresa su tutti gli $N$ token della sequenza di test
+\end{enumerate}
+\begin{example}{}
+    Immaginiamo di voler valutare un modello di linguaggio su una brevissima frase di test composta da $N = 3$ token:   $$\text{Test sequence: } (\text{"Il"}, \text{"gatto"}, \text{"beve"})$$
+    A ogni passo $i$, il modello genera una PMF condizionata su tutto il vocabolario. A noi interessa estrarre soltanto la probabilità assegnata al token effettivamente presente nel testo di test: 
+    \paragraph{Passo 1 (($w_1 = \text{"Il"}$, contesto $w_{<1} = \emptyset$):)} :
+    \begin{enumerate}
+        \item Il modello assegna $P_\theta(\text{"Il"} \mid \emptyset) = 0.5$ (cioè $2^{-1}$).
+        \item Sorpresa: $-\log_2(0.5) = 1 \text{ bit}$.
+    \end{enumerate} 
+    \paragraph{Passo 2 ($w_2 = \text{"gatto"}$, contesto $w_{<2} = \text{"Il"}$):} :
+    \begin{enumerate}
+        \item il modello assegna $P_\theta(\text{"gatto"} \mid \text{"Il"}) = 0.25$ (cioè $2^{-2}$).
+        \item Sorpresa: $-\log_2(0.25) = 2 \text{ bit}$.
+    \end{enumerate} 
+    \paragraph{Passo 3 ($w_3 = \text{"beve"}$, contesto $w_{<3} = \text{"Il gatto"}$):} :
+    \begin{enumerate}
+        \item il modello assegna $P_\theta(\text{"beve"} \mid \text{"Il gatto"}) = 0.125$ (cioè $2^{-3}$).
+        \item Sorpresa: $-\log_2(0.125) = 3 \text{ bit}$.
+    \end{enumerate} 
+    Sommiamo i contributi di sorpresa e dividiamo per il numero totale di token $N = 3$:   $$\hat{H}_{\text{test}} = -\frac{1}{3} \sum_{i=1}^3 \log_2 P_\theta(w_i \mid w_{<i})$$
+    $$\hat{H}_{\text{test}} = \frac{1 + 2 + 3}{3} = \frac{6}{3} = 2 \text{ bit/token}$$     
+    Significato dei $2 \text{ bit/token}$: In media, per ogni token che il modello legge in questo dataset di test, prova una sorpresa pari a $2 \text{ bit}$. 
+Quindi piu la sorpresa è bassa (cioè assegna alta probabilità ai token del test) piu è meglio:
+\begin{enumerate}
+    \item Alta probabilità assegnata al token reale ($P_\theta \approx 1$) $\implies$ Bassa sorpresa ($-\log_2 P_\theta \approx 0$) $\implies$ Bassa Cross-Entropy ($\hat{H}_{\text{test}}$ bassa) $\implies$ Modello eccellente.
+    \item Bassa probabilità assegnata al token reale ($P_\theta \approx 0$) $\implies$ Alta sorpresa ($-\log_2 P_\theta \gg 0$) $\implies$ Alta Cross-Entropy ($\hat{H}_{\text{test}}$ alta) $\implies$ Modello scarso.
+\end{enumerate}
+\end{example}
+\textbf{Più la sorpresa media è bassa, più il modello è stato capace di prevedere correttamente i dati reali}; più è alta, più il modello ha assegnato probabilità basse alle parole reali che sono effettivamente comparse nel testo
 
-Si procede quindi nel modo seguente: si legge il token effettivo $w_i$, si recupera la probabilità che il modello gli ha assegnato, se ne calcola il logaritmo, si sommano i contributi e si divide per il numero di token.
 
+\newpage
 \subsection{Definizione e derivazione della perplexity}
 
 \begin{definition}{Perplexity}
@@ -161,38 +250,216 @@ Equivalentemente, indicando con $\widehat H_{\mathrm{test}}$ la cross-entropy em
 
 La formula riportata nelle slide ha la forma $2^{-\frac1N\sum_i\log_2 P(w_i)}$: abbiamo qui reso esplicito che le probabilità dei token sono normalmente \emph{condizionate al contesto precedente}.
 
-La derivazione si ottiene osservando che la quantità media di sorpresa sui token effettivi è
+
+\subsubsection{Derivazione matematica della Perplexity}
+
+Partiamo dalla definizione di entropia media calcolata sui token
+effettivamente osservati nel test set:
+
 \begin{equation}
-\widehat H_{\mathrm{test}}=\frac1N\sum_{i=1}^{N}\left[-\log_2 p_i\right].
+    \hat{H}_{\text{test}}
+    = \frac{1}{N}\sum_{i=1}^{N}[-\log_2 p_i]
 \end{equation}
-Elevando $2$ a questo valore:
-\begin{align}
-\operatorname{PPL}
-&=2^{\widehat H_{\mathrm{test}}}\\
-&=2^{-\frac1N\sum_{i=1}^{N}\log_2 p_i}\\
-&=\prod_{i=1}^{N}2^{-\frac1N\log_2 p_i}\\
-&=\prod_{i=1}^{N}p_i^{-1/N}\\
-&=\left(\prod_{i=1}^{N}\frac1{p_i}\right)^{1/N}.
-\end{align}
 
-Dunque la perplexity è \emph{la media geometrica degli inversi delle probabilità assegnate ai token corretti}. Con logaritmi naturali la stessa metrica può essere scritta come
+dove $N$ rappresenta il numero totale di token e $p_i$ è
+la probabilità assegnata dal modello al token effettivamente
+osservato nella posizione $i$.
+
+La Perplexity è definita come:
+
 \begin{equation}
-\operatorname{PPL}=\exp\left(-\frac1N\sum_{i=1}^{N}\ln p_i\right).
+    \mathrm{PPL} = 2^{\hat{H}_{\text{test}}}
 \end{equation}
-Le due formule coincidono: cambia la base del logaritmo e si usa l'esponenziale corrispondente.
 
-\subsection{Significato intuitivo: quante alternative plausibili?}
+\subsubsection*{Passaggio 1: sostituzione dell'entropia}
 
-Se, a ogni passo, un modello assegna probabilità uniforme $1/K$ a esattamente $K$ possibilità e il token corretto è una di esse, allora:
-\begin{align}
-\operatorname{PPL}
-&=2^{-\log_2(1/K)}\\
-&=2^{\log_2 K}=K.
-\end{align}
+Sostituiamo la definizione di entropia media nella formula
+della Perplexity.
 
-Per questo si dice, \emph{in termini intuitivi}, che una perplexity pari a $K$ corrisponde a un'incertezza predittiva paragonabile a una scelta uniforme fra $K$ alternative. \textbf{Attenzione}: nella pratica la distribuzione non è uniforme e la perplexity non rappresenta necessariamente il numero letterale di parole candidate; rappresenta una misura esponenziale dell'incertezza predittiva media sui dati di test.
+Utilizziamo la proprietà della sommatoria:
 
-Ne segue che, a parità di corpus, tokenizzazione e protocollo di calcolo, \textbf{una perplexity più bassa indica una migliore capacità di attribuire probabilità elevate ai token realmente osservati}. Il valore minimo è $1$, quando ogni token corretto riceve probabilità $1$; la metrica può invece aumentare senza limite se una probabilità assegnata ai token corretti tende a zero.
+\begin{equation}
+    \boxed{
+        \sum_{i=1}^{N}(-a_i)
+        = -\sum_{i=1}^{N}a_i
+    }
+\end{equation}
+
+Pertanto:
+
+\begin{equation}
+    \begin{aligned}
+        \mathrm{PPL}
+        &= 2^{\hat{H}_{\text{test}}}\\[6pt]
+        &= 2^{\frac{1}{N}
+            \sum_{i=1}^{N}[-\log_2 p_i]}\\[6pt]
+        &= 2^{-\frac{1}{N}
+            \sum_{i=1}^{N}\log_2 p_i}
+    \end{aligned}
+\end{equation}
+
+\subsubsection*{Passaggio 2: dalla sommatoria alla produttoria}
+
+Utilizziamo la proprietà delle potenze:
+
+\begin{equation}
+    \boxed{a^{x+y}=a^x\cdot a^y}
+\end{equation}
+
+Generalizzando a una sommatoria di $N$ termini:
+
+\begin{equation}
+    \boxed{
+        a^{\sum_{i=1}^{N}x_i}
+        = \prod_{i=1}^{N}a^{x_i}
+    }
+\end{equation}
+
+Nel nostro caso poniamo:
+
+\begin{equation}
+    x_i = -\frac{1}{N}\log_2 p_i
+\end{equation}
+
+Applicando la proprietà otteniamo:
+
+\begin{equation}
+    \begin{aligned}
+        \mathrm{PPL}
+        &= 2^{-\frac{1}{N}
+            \sum_{i=1}^{N}\log_2 p_i}\\[6pt]
+        &= 2^{\sum_{i=1}^{N}
+            \left(-\frac{1}{N}\log_2 p_i\right)}\\[6pt]
+        &= \prod_{i=1}^{N}
+            2^{-\frac{1}{N}\log_2 p_i}
+    \end{aligned}
+\end{equation}
+
+\subsubsection*{Passaggio 3: eliminazione del logaritmo}
+
+Utilizziamo due proprietà fondamentali.
+
+\textbf{Proprietà 1: potenza di una potenza}
+
+\begin{equation}
+    \boxed{a^{bc}=(a^b)^c}
+\end{equation}
+
+\textbf{Proprietà 2: relazione inversa tra
+esponenziale e logaritmo}
+
+\begin{equation}
+    \boxed{a^{\log_a x}=x}
+    \qquad a>0,\quad a\neq 1,\quad x>0
+\end{equation}
+
+Nel nostro caso, essendo la base uguale a $2$:
+
+\begin{equation}
+    2^{\log_2 p_i}=p_i
+\end{equation}
+
+Applicando le due proprietà:
+
+\begin{equation}
+    \begin{aligned}
+        \mathrm{PPL}
+        &= \prod_{i=1}^{N}
+            2^{-\frac{1}{N}\log_2 p_i}\\[6pt]
+        &= \prod_{i=1}^{N}
+            2^{(\log_2 p_i)(-\frac{1}{N})}\\[6pt]
+        &= \prod_{i=1}^{N}
+            \left(2^{\log_2 p_i}\right)^{-\frac{1}{N}}\\[6pt]
+        &= \prod_{i=1}^{N}p_i^{-\frac{1}{N}}
+    \end{aligned}
+\end{equation}
+
+\subsubsection*{Passaggio 4: esponente fuori dalla produttoria}
+
+Utilizziamo la proprietà:
+
+\begin{equation}
+    \boxed{
+        \prod_{i=1}^{N}a_i^k
+        = \left(\prod_{i=1}^{N}a_i\right)^k
+    }
+\end{equation}
+
+Quindi:
+
+\begin{equation}
+    \begin{aligned}
+        \mathrm{PPL}
+        &= \prod_{i=1}^{N}p_i^{-\frac{1}{N}}\\[6pt]
+        &= \left(\prod_{i=1}^{N}p_i\right)^{-\frac{1}{N}}
+    \end{aligned}
+\end{equation}
+
+Ricordiamo inoltre la proprietà degli esponenti negativi:
+
+\begin{equation}
+    \boxed{a^{-k}=\left(\frac{1}{a}\right)^k}
+    \qquad a>0
+\end{equation}
+
+Pertanto:
+
+\begin{equation}
+    \begin{aligned}
+        \mathrm{PPL}
+        &= \left(\prod_{i=1}^{N}p_i\right)^{-\frac{1}{N}}\\[6pt]
+        &= \left(\frac{1}{\prod_{i=1}^{N}p_i}\right)^{\frac{1}{N}}\\[6pt]
+        &= \boxed{
+            \left(\prod_{i=1}^{N}\frac{1}{p_i}\right)^{\frac{1}{N}}
+        }
+    \end{aligned}
+\end{equation}
+
+\subsubsection*{Riepilogo della derivazione}
+
+Raccogliendo tutti i passaggi matematici:
+
+\begin{equation}
+    \boxed{
+    \begin{aligned}
+        \mathrm{PPL}
+        &= 2^{\hat{H}_{\text{test}}}\\[6pt]
+        &= 2^{\frac{1}{N}
+            \sum_{i=1}^{N}[-\log_2 p_i]}\\[6pt]
+        &= 2^{-\frac{1}{N}
+            \sum_{i=1}^{N}\log_2 p_i}\\[6pt]
+        &= \prod_{i=1}^{N}
+            2^{-\frac{1}{N}\log_2 p_i}\\[6pt]
+        &= \prod_{i=1}^{N}
+            \left(2^{\log_2 p_i}\right)^{-\frac{1}{N}}\\[6pt]
+        &= \prod_{i=1}^{N}p_i^{-\frac{1}{N}}\\[6pt]
+        &= \left(\prod_{i=1}^{N}p_i\right)^{-\frac{1}{N}}\\[6pt]
+        &= \left(\prod_{i=1}^{N}\frac{1}{p_i}\right)^{\frac{1}{N}}
+    \end{aligned}
+    }
+\end{equation}
+
+\subsubsection*{Interpretazione del risultato}
+
+La formula finale rappresenta la media geometrica dei
+reciproci delle probabilità assegnate dal modello ai token
+effettivamente osservati:
+
+\begin{equation}
+    \boxed{
+        \mathrm{PPL}
+        = \sqrt[N]{\frac{1}{p_1}\cdot
+          \frac{1}{p_2}\cdots\frac{1}{p_N}}
+    }
+\end{equation}
+
+La perplexity misura quanto il modello è "sorpreso" o "incerto" di fronte al testo reale:
+\begin{center}
+    Una perplexity pari a $K$ significa che, ad ogni passo della generazione, il modello è incerto/perplesso come se dovesse scegliere a caso tra $K$ parole equiprobabili.
+\end{center}
+Più il valore della perplexity è basso, più il modello è preciso e sicuro delle proprie predizioni. Se il modello attribuisse sempre probabilità $1$ al token corretto, la perplexity sarebbe pari a $1$ (il valore ideale).
+Un modello ben addestrato saprà che parole come "sole" o "tempo" sono molto probabili, concentrando la probabilità su pochissime opzioni plausibili. Se ottiene una perplexity di $8$, significa che in media è incerto quanto lo sarebbe nel tirare a indovinare tra $8$ opzioni equivalenti.
+Quindi la perplexity indica \textbf{quanto il modello è incerto/perplesso nella generazione del testo reale.}
 
 \subsection{Esempi numerici svolti}
 
@@ -236,21 +503,6 @@ Supponiamo che il test contenga due token. Il modello $A$ assegna ai token corre
 \end{align}
 Il modello $A$ predice meglio i token di questo specifico test, perché assegna loro probabilità superiori e ottiene perplexity inferiore.
 \end{example}
-
-\begin{example}{Una predizione molto errata pesa parecchio}
-Per due token siano $p_1=0.9$ e $p_2=0.01$. Allora
-\begin{equation}
-\operatorname{PPL}=(0.9^{-1}\cdot0.01^{-1})^{1/2}
-=\sqrt{\frac1{0.009}}\approx10.54.
-\end{equation}
-Anche se il primo token è previsto molto bene, il secondo ha una probabilità così bassa da far crescere notevolmente il valore finale. La metrica penalizza particolarmente i token corretti ai quali il modello attribuisce probabilità estremamente piccole.
-\end{example}
-
-\subsection{Interpretazione corretta e condizioni di confronto}
-
-La perplexity misura la \emph{qualità della previsione probabilistica}, non direttamente la comprensione semantica. È necessario confrontare valori calcolati sullo stesso insieme di test, con tokenizzazione coerente, stesso trattamento del contesto e stessa convenzione di normalizzazione. Una perplexity \emph{per token} può non essere direttamente confrontabile fra tokenizer diversi, perché il numero e la natura delle unità previste cambiano.
-
-La metrica può inoltre essere calcolata utilizzando un intero prefisso oppure limitando artificialmente la finestra di contesto. Di conseguenza, la parola ``locale'' usata nelle slide descrive soprattutto \emph{l'obiettivo di valutazione token-per-token}; non implica, in senso matematico, che il modello sia obbligato a usare soltanto i token immediatamente precedenti.
 
 \section{Perché la perplexity non è sufficiente per i contesti lunghi}
 
