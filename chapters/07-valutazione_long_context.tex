@@ -815,8 +815,37 @@ BP=\exp(1-5/2)=e^{-1.5}\approx0.223.
 \end{example}
 
 \subsection{ROUGE e BLEU: differenza concettuale}
+Queste due metriche NON sono usate per gli LLMs con lungo contesto, perchè non efficaci.
+
+In generale le metriche viste finora non vengono utilizzate per valutare LLMs su un contesto lungo.
 
 ROUGE, nell'interpretazione \emph{recall-oriented} evidenziata nelle slide, chiede \emph{quanta informazione lessicale presente nel riferimento sia stata coperta?} BLEU privilegia invece la domanda \emph{quanta parte di ciò che è stato generato coincide con il riferimento?}, aggiungendo una penalità per risposte troppo corte. Entrambe dipendono dalla sovrapposizione di $n$-grammi e possono attribuire punteggi modesti a parafrasi corrette oppure non riconoscere errori semantici nascosti dietro una forte somiglianza lessicale.
+
+\section*{Ambiti Applicativi Principali di BLEU e ROUGE}
+
+\begin{itemize}
+    \item \textbf{BLEU (\textit{Bilingual Evaluation Understudy})}
+    \begin{itemize}
+        \item \textbf{Uso principale:} Traduzione Automatica (\textit{Machine Translation}).
+        \item \textbf{Motivazione:} Orientata alla \textbf{precisione} ($p_n$), verifica che le sequenze di $n$-grammi generate dal modello siano corrette e presenti nel testo di riferimento umano, penalizzando parole errate o inventate.
+    \end{itemize}
+
+    \item \textbf{ROUGE (\textit{Recall-Oriented Understudy for Gisting Evaluation})}
+    \begin{itemize}
+        \item \textbf{Uso principale:} Sintesi Automatica del Testo (\textit{Text Summarization}).
+        \item \textbf{Motivazione:} Orientata al \textbf{richiamo} (\textit{recall}), misura quanta parte delle informazioni e dei concetti chiave contenuti nei riassunti umani sia stata effettivamente catturata dall'output del modello.
+    \end{itemize}
+\end{itemize}
+
+\subsection*{Altri contesti applicativi (task a risposta breve o vincolata)}
+
+\begin{enumerate}
+    \item \textbf{Data-to-Text Generation:} Generazione di testo in linguaggio naturale a partire da dati strutturati, tabelle o grafi (es. report finanziari o meteo).
+    \item \textbf{Generazione di Parafrasi:} Valutazione della sovrapposizione lessicale e strutturale tra frasi rielaborate e il riferimento.
+    \item \textbf{Short-Answer Question Answering:} Valutazione di risposte brevi e fattuali con target ben delimitato e univoco.
+    \item \textbf{Baseline e monitoraggio:} Test automatici rapidi, deterministici ed economici per tracciare i progressi del modello durante il training prima della valutazione umana o tramite LLM.
+\end{enumerate}
+
 
 \subsection{Valutazione mediante un altro LLM: LLM-as-a-Judge}
 
@@ -851,28 +880,36 @@ Le domande fondamentali delle slide sono:
 Le metriche standard basate, per esempio, sulla perplexity, riflettono in larga misura la predizione locale. Occorre invece testare direttamente i fenomeni tipici dei contesti estesi. La costruzione di benchmark adeguati presenta inoltre tre difficoltà: definire una \emph{ground truth} attendibile per dipendenze lontane, sostenere costi computazionali più elevati e disporre di dataset esplicitamente progettati per lunghe finestre contestuali.
 
 \subsection{Tre capacità da verificare}
-
+Le tre capacità, Recall, Inference e Coherence, \textbf{sono tre aspetti che vogliamo valutare quando analizziamo le prestazioni di un Large Language Model (LLM) che lavora con contesti lunghi}.
+Non sono metriche in senso matematico o algoritmico, bensì le tre capacità che si vogliono analizzare quando si testano gli LLM su contesti lunghi.
 \begin{enumerate}
 \item \textbf{Recall}: recuperare informazioni collocate molti token prima della domanda. Il successo richiede che i fatti remoti rimangano accessibili.
 \item \textbf{Inference}: sintetizzare e analizzare informazioni distribuite in documenti lunghi. Non basta citare due passaggi corretti: occorre collegarli per dedurne una conclusione.
 \item \textbf{Coherence}: mantenere la consistenza dell'output attraverso un discorso articolato, evitando contraddizioni e cambiamenti immotivati di tema, terminologia o conclusione.
 \end{enumerate}
 
-\begin{example}{Recall contro inference}
-All'inizio di un rapporto è riportato ``Il progetto A costa 20 milioni''. In fondo compare ``Il progetto B costa 15 milioni''. La domanda ``Quanto costa A?'' richiede \emph{recall}. La domanda ``Qual è il progetto meno costoso, e di quanto?'' richiede \emph{inference} fra due informazioni distanti: B costa 5 milioni in meno. Se il modello svolge correttamente il calcolo ma attribuisce altrove un costo diverso ad A, mostra un difetto di \emph{coherence}.
+\begin{example}{Recall contro Inference}
+All'inizio di un rapporto è riportato ``Il progetto A costa 20 milioni''. In fondo compare ``Il progetto B costa 15 milioni''. La domanda ``Quanto costa A?'' richiede \textbf{recall}. La domanda ``Qual è il progetto meno costoso, e di quanto?'' richiede \textbf{inference} fra due informazioni distanti, perchè sto analizzando informazioni distribuite su contesti lunghi: B costa 5 milioni in meno. Se il modello svolge correttamente il calcolo ma attribuisce altrove (ad esempio in una parte del testo piu avanti, o comunque in un'altra parte del testo) un costo diverso ad A, mostra un difetto di \textbf{coherence}.
 \end{example}
 
-\subsection{Perché servono metriche specializzate}
 
-Due modelli potrebbero avere F1 o perplexity simili, pur differendo profondamente nella capacità di sfruttare token remoti. Le metriche specializzate devono aiutare a verificare se un modello sia in grado di:
-\begin{itemize}
-\item recuperare informazioni lontane (\emph{distant retrieval});
-\item conservare e aggiornare nella rappresentazione contestuale le informazioni rilevanti (\emph{maintain relevant memories});
-\item evitare un eccessivo affidamento alle informazioni più recenti (\emph{recency bias});
-\item evitare distorsioni legate alla posizione dei fatti nel testo (\emph{position bias}).
-\end{itemize}
+\section*{Differenza tra Metrica e Benchmark}
 
-Una \emph{recency bias} è una preferenza sistematica per quanto appare più vicino alla fine del contesto. Una \emph{position bias} è una dipendenza sistematica delle prestazioni dalla collocazione dell'informazione, che può riguardare anche altre posizioni. La conclusione è che un risultato globale medio non basta: serve studiare come cambino le prestazioni al variare della posizione e della distanza.
+\begin{description}
+    \item[\textbf{Metrica (\textit{Metric})}:] Singola formula matematica o quantitativa usata per misurare uno specifico aspetto dell'output di un modello (es. \textit{Accuracy, BLEU, ROUGE, BERTScore}). Risponde alla domanda: \textit{«Come si valuta questa singola risposta?»}
+    \item[\textbf{Benchmark}:] Insieme standardizzato di dataset, compiti (\textit{task}), protocolli di test e metriche, progettato per valutare le capacità complessive di un modello in modo riproducibile e confrontabile (es. \textit{MMLU, GSM8K, LongBench, Needle In A Haystack}). Risponde alla domanda: \textit{«Quanto è performante il modello su un determinato compito?»}
+\end{description}
+
+Di solito un benchmark ha:
+\begin{enumerate}
+    \item Dataset di test: L'insieme di dati di input (domande, documenti, immagini, frammenti di codice) accoppiati con le risposte corrette o di riferimento (ground truth).
+    \item Protocollo di test (Task): Le regole con cui i dati vengono somministrati al modello (ad esempio in modalità zero-shot, few-shot, o con limiti sul numero di token).
+    \item Metrica/e di valutazione: La formula matematica o la procedura usata per calcolare il punteggio confrontando l'output del modello con il dataset di riferimento (es. Accuracy, Exact Match, F1-Score).
+\end{enumerate}
+\begin{center}
+Un benchmark serve proprio a valutare la prestazione di un LLM su un determinato compito (task) o su un insieme specifico di abilità.    
+\end{center}
+\newpage
 
 \section{Compiti closed-ended e open-ended}
 
