@@ -204,6 +204,9 @@ $\hat{H}_{\text{test}}$ è la sorpresa media per token che il modello sperimenta
     \item $-\log_2 P_\theta(w_i \mid w_{<i})$: La sorpresa puntuale sul singolo token $i$-esimo.
     \item $\frac{1}{N}\sum_{i=1}^N$: La media aritmetica di questa sorpresa su tutti gli $N$ token della sequenza di test
 \end{enumerate}
+\textbf{Quindi dopo tutta questa derivazione, questa misura può essere utile a valutare la qualità di un modello}.
+Quindi la teoria dell'entropia ci aiuta a valutare la qualità di un modello.
+La cross-entropy empirica (insieme alla perplessità da essa derivata, che vedremo adesso) è la metrica intrinseca fondamentale per valutare la qualità predittiva e la capacità di generalizzazione di un modello di linguaggio, che però può essere inadeguata in contesti lunghi
 \begin{example}{}
     Immaginiamo di voler valutare un modello di linguaggio su una brevissima frase di test composta da $N = 3$ token:   $$\text{Test sequence: } (\text{"Il"}, \text{"gatto"}, \text{"beve"})$$
     A ogni passo $i$, il modello genera una PMF condizionata su tutto il vocabolario. A noi interessa estrarre soltanto la probabilità assegnata al token effettivamente presente nel testo di test: 
@@ -542,7 +545,30 @@ L'\emph{accuracy} misura la proporzione di predizioni corrette sul numero totale
 \end{equation}
 \end{definition}
 
-È appropriata per compiti con risposta oggettivamente verificabile, per esempio \emph{question answering} a risposta singola, scelta multipla o recupero di un fatto quando si valuta la correttezza della risposta finale. Se il modello risponde correttamente a $80$ domande su $100$, l'accuracy è $80/100=0.8$, ossia $80\%$. Può tuttavia risultare poco informativa in classificazioni fortemente sbilanciate.
+È appropriata per compiti con risposta oggettivamente verificabile, per esempio \emph{question answering} a risposta singola, scelta multipla o recupero di un fatto quando si valuta la correttezza della risposta finale. Se il modello risponde correttamente a $80$ domande su $100$, l'accuracy è $80/100=0.8$, ossia $80\%$. \textbf{Può tuttavia risultare poco informativa in classificazioni fortemente sbilanciate}.
+\begin{example}{Accuracy in classi sbilanciate}
+    Supponiamo di avere un dataset composto da:
+    \begin{enumerate}
+        \item 2 esempi positivi.
+        \item 1000 esempi negativi.
+        \item In totale abbiamo 1002 esempi.
+    \end{enumerate}
+Il nostro modello predice sempre la classe negativa (0), indipendentemente dall'input.
+Di conseguenza:
+\[
+\begin{aligned}
+\text{Accuracy}
+&=\frac{1000}{1002}\\[4pt]
+&\approx 0.998 = 99.8\%
+\end{aligned}
+\]
+Il modello ottiene un'accuracy di 0.998, pur non riuscendo a riconoscere nessun esempio della classe positiva.
+\end{example}
+
+
+
+
+
 
 \subsection{Precision, Recall e F1-score}
 
@@ -604,25 +630,33 @@ Per una predizione $\widehat y$ e una risposta di riferimento $y$, l'\emph{Exact
 0 & \text{altrimenti}.
 \end{cases}
 \end{equation}
-Il punteggio complessivo è la media degli EM sul dataset.
 \end{definition}
 
-Questa metrica è particolarmente trasparente per risposte univoche, identificatori, codici e brevi risposte fattuali. È però rigida rispetto a parafrasi equivalenti. Per esempio, ``Roma'' e ``La città di Roma'' hanno identico significato ma potrebbero non coincidere letteralmente; alcuni benchmark applicano una normalizzazione predefinita prima del confronto.
+\textbf{Questa metrica è particolarmente trasparente per risposte univoche, identificatori, codici e brevi risposte fattuali. È però rigida rispetto a parafrasi equivalenti}. Per esempio, ``Roma'' e ``La città di Roma'' hanno identico significato ma potrebbero non coincidere letteralmente; alcuni benchmark applicano una normalizzazione predefinita prima del confronto.
 
 \subsection{ROUGE: sovrapposizione con riassunti di riferimento}
 
 \begin{definition}{ROUGE}
-\emph{ROUGE} significa \emph{Recall-Oriented Understudy for Gisting Evaluation}. È una famiglia di metriche che confronta un testo generato automaticamente con uno o più testi di riferimento, spesso riassunti redatti da esseri umani, misurando la sovrapposizione lessicale e strutturale.
+\emph{ROUGE} significa \emph{Recall-Oriented Understudy for Gisting Evaluation}. È una famiglia di metriche che confronta un testo generato automaticamente da un IA con uno o più testi di riferimento,che sono spesso riassunti redatti da esseri umani, \textbf{misurando la sovrapposizione lessicale e strutturale}.
+In particolare:
+\begin{enumerate}
+    \item \textbf{Sovrapposizione lessicale : } Riguarda la \textbf{presenza delle stesse parole e concetti chiave}. Misura quante delle parole usate dall'umano compaiono anche nel testo dell'IA.Se il riassunto umano menziona determinati termini e il modello li include, la sovrapposizione lessicale aumenta. (\textbf{non c'è bisogno di contiguità}).
+    \item \textbf{Sovrapposizione strutturale : } Riguarda l'ordine e la sequenza con cui le parole sono disposte. Non basta inserire le parole corrette in ordine sparso: misura se il modello rispetta il flusso sintattico e la combinazione di concetti usata dall'umano. (qui entra in gioco la contiguità).
+\end{enumerate}
 \end{definition}
 
-Il termine \emph{understudy} proviene dal teatro e indica un sostituto dell'attore principale: ROUGE funziona come indicatore automatico che \emph{approssima} una valutazione umana. Il termine \emph{gisting} richiama la produzione del \emph{gist}, cioè del nucleo informativo o sintesi dei concetti principali.
+\begin{observation}{}
+Il termine \emph{understudy} proviene dal teatro e indica un sostituto dell'attore principale.    
+\end{observation}
 
-Un $n$-gramma è una sequenza contigua di $n$ token: un \emph{unigramma} contiene un token, un \emph{bigramma} due token consecutivi, e così via. Le varianti richiamate nelle slide sono:
+Un $n$-gramma (diverso dagli n-gram models) \textbf{è una sequenza contigua di $n$ token}: un \emph{unigramma} contiene un token, un \emph{bigramma} due token consecutivi, e così via. Le varianti sono:
 \begin{itemize}
-\item \textbf{ROUGE-1}: sovrapposizione tra unigrammi;
-\item \textbf{ROUGE-2}: sovrapposizione tra bigrammi;
+\item \textbf{ROUGE-1}: sovrapposizione tra unigrammi, in questo senso, c'è solo una sovrapposizione lessicale, perchè si tratta di unigrammi;
+\item \textbf{ROUGE-2}: sovrapposizione tra bigrammi, e quindi c'è una sovrapposizione sia lessicale che strutturale;
 \item \textbf{ROUGE-L}: sovrapposizione basata sulla \emph{longest common subsequence} (LCS), la più lunga sottosequenza comune, non necessariamente contigua, che preserva l'ordine degli elementi.
 \end{itemize}
+
+\newpage
 
 Nella formulazione orientata al recall, ROUGE-$n$ è espresso come
 \begin{equation}
@@ -630,7 +664,43 @@ Nella formulazione orientata al recall, ROUGE-$n$ è espresso come
 =\frac{\sum_{g\in G_n}\min\{c_{\mathrm{cand}}(g),c_{\mathrm{ref}}(g)\}}
 {\sum_{g\in G_n}c_{\mathrm{ref}}(g)},
 \end{equation}
-dove $c_{\mathrm{cand}}(g)$ e $c_{\mathrm{ref}}(g)$ sono i conteggi dell'$n$-gramma $g$ rispettivamente nella risposta candidata e nel riferimento. La somma al numeratore conta le occorrenze corrispondenti, senza superare quelle presenti nel riferimento. In alcune implementazioni vengono riportate anche varianti basate su precision e F1.
+\begin{enumerate}
+    \item $n$: Indica l'ampiezza della finestra di parole consecutive analizzata.
+    \item $G_n$: L'insieme di tutti gli $n$-grammi presenti nel testo di riferimento.
+    \item $c_{\text{cand}}(g)$: Il numero di volte che l'$n$-gramma $g$ compare nella risposta generata dal modello (candidata).
+    \item $c_{\text{ref}}(g)$: Il numero di volte che l'$n$-gramma $g$ compare nel testo di riferimento umano.
+    \item $\min\{c_{\text{cand}}(g), c_{\text{ref}}(g)\}$ (Clipping/Capping al numeratore): Conta le occorrenze condivise ponendo un tetto massimo pari a $c_{\text{ref}}(g)$. Questo impedisce al modello di "gonfiare" il punteggio ripetendo la stessa parola corretta più volte.
+    \item $\sum_{g \in G_n} c_{\text{ref}}(g)$ (Denominatore): È il numero totale di $n$-grammi contenuti nel riferimento umano. Rappresenta la totalità delle informazioni di riferimento da "richiamare".
+\end{enumerate}
+
+
+Si tratta della formula generale parametrizzata per l'intera famiglia ROUGE-N basata su $n$-grammi contigui (come ROUGE-1, ROUGE-2, ROUGE-3, ecc.).
+Sostituendo il valore del parametro $n$, la formula si adatta alla lunghezza della sequenza considerata:
+\begin{itemize}
+    \item Per $n = 1$, valuta i singoli unigrammi $\rightarrow$ ROUGE-1.  
+    \item Per $n = 2$, valuta i bigrammi (coppie di parole consecutive) $\rightarrow$ ROUGE-2. 
+    \item Per un generico $n$, valuta le sequenze contigue di $n$ parole $\rightarrow$ ROUGE-N.
+\end{itemize}
+\begin{observation}{}
+    La formula non si applica direttamente a varianti come ROUGE-L o ROUGE-S, che non richiedono la contiguità e si basano rispettivamente sulla Longest Common Subsequence e sugli Skip-Bigram
+\end{observation}
+
+\begin{example}{ROUGE-1}
+    \begin{itemize}
+        \item Riferimento umano ($c_{\text{ref}}$): "il gatto dorme sul divano" ($5$ unigrammi totali). 
+        \item Testo generato dall'IA ($c_{\text{cand}}$): "il gatto gatto dorme" ($4$ unigrammi totali).
+    \end{itemize}
+    \textbf{Conteggio al numeratore} : 
+    \begin{itemize}
+        \item "il": $\min(c_{\text{cand}}=1, c_{\text{ref}}=1) = 1$ 
+        \item "gatto": $\min(c_{\text{cand}}=2, c_{\text{ref}}=1) = 1$ (la seconda occorrenza generata viene ignorata).
+        \item "dorme": $\min(c_{\text{cand}}=1, c_{\text{ref}}=1) = 1$
+        \item "sul": $\min(c_{\text{cand}}=0, c_{\text{ref}}=1) = 0$
+        \item "divano": $\min(c_{\text{cand}}=0, c_{\text{ref}}=1) = 0$
+    \end{itemize}
+    \textbf{Somma al numeratore} : $1 + 1 + 1 + 0 + 0 = 3$ \\
+    \textbf{Somma al denominatore}: $5$ (totale unigrammi del riferimento)   $$\text{ROUGE-1}_R = \frac{3}{5} = 0.6 \quad (60\%)$$ 
+\end{example}
 
 \begin{example}{ROUGE-1 e ROUGE-2}
 Consideriamo la sequenza di riferimento ``il gatto dorme sul divano'' e la sequenza generata ``il gatto dorme sul letto''. Entrambe hanno cinque unigrammi. Quattro sono comuni: ``il'', ``gatto'', ``dorme'', ``sul''. Il recall ROUGE-1 è
@@ -651,11 +721,35 @@ Per ROUGE-L si individua una LCS fra le due sequenze. Se la sequenza di riferime
 \begin{definition}{BLEU}
 \emph{BLEU} significa \emph{Bilingual Evaluation Understudy}. È una metrica di corrispondenza fra testo generato e riferimento basata principalmente sulla \emph{precision} degli $n$-grammi, con una penalizzazione per i testi eccessivamente brevi.
 \end{definition}
+La differenza fondamentale rispetto a ROUGE, risiede nella prospettiva:
+\begin{enumerate}
+    \item ROUGE (Recall / Richiamo): Risponde alla domanda "Di tutto quello che l'umano ha scritto nel riferimento, quanto ne ha catturato l'IA?"
+    \item BLEU (Precision / Precisione): Risponde alla domanda "Di tutto quello che l'IA ha generato, quanto è corretto ed effettivamente presente nel testo umano?"
+\end{enumerate}
 
-La formula presente nelle slide è
-\begin{equation}\label{eq:bleu}
+
+
+La formula è
+\begin{equation}
 \boxed{\operatorname{BLEU}=BP\cdot\exp\left(\sum_{n=1}^{N}w_n\log p_n\right)},
 \end{equation}
+\begin{observation}{Chiarimento su $n$ ed $N$}
+    Per evitare confusione sui simboli:
+    \begin{itemize}
+        \item $n$ (in corsivo minuscolo): È la lunghezza del singolo $n$-gramma analizzato al momento. 
+        \begin{enumerate}
+            \item Per $n=1$: valuti i singoli unigrammi (singole parole).   
+            \item Per $n=2$: valuti i bigrammi (coppie di parole consecutive).
+            \item Per $n=3$: valuti i trigrammi.
+            \item Per $n=4$: valuti i quadrigrammi. 
+        \end{enumerate}
+        \item $N$ (maiuscolo): È l'ordine massimo di $n$-grammi fino al quale ci si spinge per calcolare il punteggio finale. 
+        \begin{enumerate}
+            \item Quasi sempre si imposta $N = 4$
+            \item La sommatoria $\sum_{n=1}^N$ significa che BLEU calcola la precisione per $n=1, 2, 3, 4$ e poi ne fa una media.
+        \end{enumerate}
+    \end{itemize}
+\end{observation}
 dove:
 \begin{itemize}
 \item $p_n$ è la precision modificata degli $n$-grammi di lunghezza $n$;
@@ -670,12 +764,39 @@ w_1=w_2=w_3=w_4=\frac14,
 \end{equation}
 ossia si attribuisce uguale peso a unigrammi, bigrammi, trigrammi e quadrigrammi. BLEU è spesso utilizzata per traduzione automatica e anche per valutare testi riassuntivi.
 
+
+\begin{definition}{Precision modificata}
 Una formulazione comune della precision modificata è
 \begin{equation}
 p_n=\frac{\sum_{g\in G_n}\min\{c_{\mathrm{cand}}(g),\,c_{\mathrm{ref}}(g)\}}
 {\sum_{g\in G_n}c_{\mathrm{cand}}(g)}.
 \end{equation}
-Se sono disponibili più riferimenti, il conteggio ammesso per ciascun $n$-gramma viene tipicamente limitato al massimo conteggio riscontrato fra essi.
+Qui $G_n$ scorre sugli $n-grammi$ del testo generato, mentre nella ROUGE $G_n$ scorre sul testo di riferimento.\\
+
+Indica la percentuale di sequenze di $n$ parole generate dal modello che sono effettivamente presenti nel testo di riferimento umano, quindi la sequenza di $n$ parole del testo IA che  sono corrette 
+Questa è diversa dalla \textbf{ROUGE}, che indicava quanto del testo reale, veniva catturato dall'IA.
+\begin{itemize}
+    \item $p_1$ (Unigrammi, $n=1$): Misura la precisione delle singole parole. Valuta la correttezza del vocabolario/lessico usato (quante parole generate sono giuste).
+    \item $p_2$ (Bigrammi, $n=2$): Misura la precisione delle coppie di parole consecutive. Inizia a valutare la fluidità locale e la correttezza dei sintagmi brevi. 
+    \item $p_3$ e $p_4$ (Trigrammi e Quadrigrammi, $n=3, 4$): Misurano la precisione di sequenze più lunghe. Valutano la struttura sintattica e la naturalezza delle frasi su scala più ampia.  
+\end{itemize}
+Ad esempio considera:
+\begin{enumerate}
+    \item "Il gatto è nero" Frase reale.
+    \item "Il gatto è bianco frocio" Frase generata da IA.
+\end{enumerate}
+Se calcolo $p_1$, questa è
+$$
+\frac{1+1+1+0+0}{5} = 0.6
+$$
+dove 5 è il numero di token effettivi nel testo modificato,non sono precise due sequenze, perchè non presenti nel testo originale, quindi vengono punite.
+\\
+Se invece calcolassi la ROUGE-1, allora avrei:
+$$
+\frac{3}{4} = 0.75
+$$
+Cioè quanto il testo originale viene "coperto" da quello generato, ed è alta perchè al testo modificato manca solo una parola per coprire tutto quello del testo originale.
+\end{definition}
 
 La \emph{brevity penalty}, in una definizione standard, è
 \begin{equation}
@@ -686,12 +807,11 @@ BP=\begin{cases}
 \end{equation}
 dove $c$ è la lunghezza della candidata e $r$ la lunghezza del riferimento scelto secondo il protocollo BLEU; nel caso $c=0$ il punteggio viene posto a zero. La formula della penalità è un approfondimento rispetto alle slide, che riportano $BP$ senza svilupparne l'espressione.
 
-\begin{example}{Perché BLEU richiede la brevity penalty}
+\begin{example}{Perché BLEU richiede la brevity penalty IMPORTANTE}
 Il riferimento è ``il gatto dorme sul divano'', di lunghezza $r=5$. Il modello restituisce soltanto ``il gatto'', di lunghezza $c=2$. Per gli unigrammi proposti, entrambi corretti, la precision è $p_1=2/2=1$: senza una penalizzazione, una risposta incompleta potrebbe apparire eccellente. Invece
 \begin{equation}
 BP=\exp(1-5/2)=e^{-1.5}\approx0.223.
 \end{equation}
-Usando esclusivamente BLEU-1, con $w_1=1$, si ottiene $\operatorname{BLEU\text{-}1}\approx0.223$. Il risultato penalizza correttamente la brevità. Non va confuso con BLEU-4: su una candidata di soli due token non esistono trigrammi o quadrigrammi, e l'esito dipende anche dalle convenzioni di smoothing e aggregazione adottate.
 \end{example}
 
 \subsection{ROUGE e BLEU: differenza concettuale}
@@ -715,6 +835,8 @@ Questo approccio può valutare caratteristiche che non sono facilmente espresse 
 Si tratta di una soluzione sempre più diffusa nella valutazione di task \emph{open-ended} su contesti lunghi, dove non esiste una singola risposta testuale esatta. Un possibile protocollo consiste nel fornire al valutatore il testo di riferimento, la richiesta, la risposta del sistema e una \emph{rubric} che descriva come assegnare un punteggio da $1$ a $5$ per la fedeltà. L'LLM restituisce il voto e una giustificazione.
 
 \textbf{Precisazione metodologica}: questo approccio non è automaticamente oggettivo. Il valutatore può essere influenzato dalla formulazione del prompt, dalla lunghezza della risposta, dall'ordine delle candidate e dai propri errori. Per risultati più affidabili si possono usare criteri espliciti, controlli umani, confronti in ordine variato e più valutatori. Questi accorgimenti ampliano il contenuto sintetico delle slide.
+
+\newpage
 
 \section{Sfide specifiche della valutazione di contesti lunghi}
 
