@@ -897,7 +897,7 @@ All'inizio di un rapporto è riportato ``Il progetto A costa 20 milioni''. In fo
 
 \begin{description}
     \item[\textbf{Metrica (\textit{Metric})}:] Singola formula matematica o quantitativa usata per misurare uno specifico aspetto dell'output di un modello (es. \textit{Accuracy, BLEU, ROUGE, BERTScore}). Risponde alla domanda: \textit{«Come si valuta questa singola risposta?»}
-    \item[\textbf{Benchmark}:] Insieme standardizzato di dataset, compiti (\textit{task}), protocolli di test e metriche, progettato per valutare le capacità complessive di un modello in modo riproducibile e confrontabile (es. \textit{MMLU, GSM8K, LongBench, Needle In A Haystack}). Risponde alla domanda: \textit{«Quanto è performante il modello su un determinato compito?»}
+    \item[\textbf{(\textit{Benchmark})}:] Un benchmark è un sistema di valutazione standardizzato, generalmente costituito da un dataset di test, un protocollo di valutazione e una o più metriche, che permette di misurare e confrontare le prestazioni di diversi modelli su uno o più task, in condizioni definite e riproducibili.
 \end{description}
 
 Di solito un benchmark ha:
@@ -907,9 +907,9 @@ Di solito un benchmark ha:
     \item Metrica/e di valutazione: La formula matematica o la procedura usata per calcolare il punteggio confrontando l'output del modello con il dataset di riferimento (es. Accuracy, Exact Match, F1-Score).
 \end{enumerate}
 \begin{center}
-Un benchmark serve proprio a valutare la prestazione di un LLM su un determinato compito (task) o su un insieme specifico di abilità.    
+Un benchmark serve proprio a valutare la prestazione di un LLM su un determinato compito (task o piu task) o su un insieme specifico di abilità. \\
+Questi task come vedremo ora, possono essere di due tipi.    
 \end{center}
-\newpage
 
 \section{Compiti closed-ended e open-ended}
 
@@ -953,47 +953,167 @@ Dopo la lettura di un articolo di cinquanta pagine:
 La prima ammette una risposta verificabile con Exact Match; la seconda richiede di giudicare copertura dei contenuti, fedeltà e coerenza dell'argomentazione.
 \end{example}
 
+Quindi quando creo un benchmark, quello che devo tenere in considerazione prima di tutto è che task (o piu task) voglio valutare, e se questo è \textbf{open-ended} o \textbf{close-ended}, piu precisamente:
+\begin{itemize}
+    \item Dataset: contiene gli esempi sui quali valutiamo la capacità del modello di svolgere quel task.
+    \item Protocollo: stabilisce come il modello deve affrontare il task durante la valutazione.
+    \item Metrica: misura quanto bene il modello svolge il task.
+\end{itemize}
+
+
 \section{Metriche di retrieval, distanza e posizione della risposta}
+Abbiamo detto che un benchmark serve a valutare le prestazioni di un LLM su uno o più task. Ma ora sorge una domanda:
+\begin{center}
+    Quale metrica dobbiamo utilizzare per valutare il modello?
+\end{center}
+e la risposta dipende dal tipo di task.
+Per esempio, per un task closed-ended di classificazione possiamo utilizzare l'Accuracy.
+
+Ma se il task cambia, potrebbe essere necessaria una metrica differente.\\
+
+Supponiamo ora che il task da valutare sia:
+\begin{center}
+    Data una query, recuperare da una collezione i documenti che contengono informazioni rilevanti.
+\end{center}
+Questo è un task di \textbf{Information Retrieval}, diverso dalla semplice classificazione o dalla generazione di testo.
+E quindi bisogna scegliere metriche apposite.
+
 
 \subsection{Retrieval Accuracy e Recall@k}
 
 La valutazione di un compito di \emph{retrieval} chiede se il sistema riesca a recuperare lo \emph{span} o il passaggio corretto da un documento lungo. Uno \emph{span} è una porzione continua del testo, per esempio la frase che contiene la risposta. Le slide citano \emph{Retrieval Accuracy / R@k}, oltre a MRR e Precision@k.
 
 \begin{definition}{Recall@k}
-Per una query $q$, sia $G_q$ l'insieme dei documenti o passaggi rilevanti e sia $T_k(q)$ l'insieme dei primi $k$ elementi restituiti. Il recall ai primi $k$ risultati è
+Consideriamo \\
+\begin{tabular}{|p{0.25\textwidth}|p{0.68\textwidth}|}
+\hline
+\textbf{Notazione} & \textbf{Descrizione} \\ \hline
+$q$ & La query posta dall'utente \\ \hline
+$G_q$ & Insieme di tutti i documenti rilevanti per la query \\ \hline
+$T_k(q)$ & Insieme dei primi $k$ documenti restituiti dal sistema, questi li restituisce il sistema e sono ordinati mediante un criterio \\ \hline
+$G_q \cap T_k(q)$ & Documenti rilevanti recuperati nei primi $k$ risultati \\ \hline
+$\vert{}G_q\vert{}$ & Numero totale di documenti rilevanti \\ \hline
+\end{tabular}
+Per una query $q$, sia $G_q$ l'insieme di tutti i documenti rilevanti per la query (stabilito tramite una ground truth) e sia $T_k(q)$ l'insieme dei primi $k$ elementi restituiti dal modello. Il recall ai primi $k$ risultati è
 \begin{equation}
 \operatorname{Recall@k}(q)=\frac{|G_q\cap T_k(q)|}{|G_q|},\qquad |G_q|>0.
 \end{equation}
-Su molte query si può utilizzare la media dei recall individuali.
+La Recall@k misura quanti dei documenti rilevanti esistenti sono riuscito a recuperare?
 \end{definition}
-
-Nel caso particolare di \emph{una sola risposta rilevante per domanda}, il Recall@k assume soltanto i valori zero o uno: vale uno se il passaggio corretto compare nei primi $k$ risultati, zero altrimenti. Mediando sulle query si ottiene anche una misura di \emph{success@k} o \emph{hit rate@k}, che in tale configurazione coincide con il Recall@k medio.
 
 \begin{definition}{Precision@k}
 \begin{equation}
 \operatorname{Precision@k}(q)=\frac{|G_q\cap T_k(q)|}{k}.
 \end{equation}
-Misura la frazione di elementi rilevanti fra i primi $k$ risultati restituiti.
+La Precision@k misura i documenti che ho recuperato, quanti sono effettivamente rilevanti?
 \end{definition}
 
-\begin{definition}{Mean Reciprocal Rank (MRR)}
-Se $r_q$ è la posizione, a partire da $1$, del primo elemento rilevante restituito per la query $q$, il \emph{reciprocal rank} è $1/r_q$ (oppure $0$ se non ne è stato trovato alcuno). Su $Q$ query:
-\begin{equation}
-\operatorname{MRR}=\frac1Q\sum_{q=1}^{Q}\frac1{r_q}.
-\end{equation}
-\end{definition}
+\begin{example}{}
+Per \(k=3\):
+\[
+\operatorname{Recall@3}=\frac{2}{5}=0.4
+\]
 
-\begin{example}{Retrieval nei primi risultati}
-I cinque passaggi restituiti per una domanda sono, nell'ordine: non rilevante, non rilevante, rilevante, non rilevante, rilevante. Supponiamo che in tutto vi siano due passaggi rilevanti. Allora:
-\begin{align}
-\operatorname{Recall@3}&=\frac12=0.5,\\
-\operatorname{Precision@3}&=\frac13\approx0.333,\\
-\operatorname{ReciprocalRank}&=\frac13.
-\end{align}
-Ai primi cinque risultati il recall salirebbe a $2/2=1$, mentre la precision sarebbe $2/5=0.4$. L'MRR premia il recupero tempestivo del primo risultato corretto, mentre Recall@k descrive la copertura dei passaggi rilevanti.
+\[
+\operatorname{Precision@3}=\frac{2}{3}\approx0.667
+\]
+
+Quindi abbiamo recuperato il 40 percento dei documenti rilevanti esistenti, ma circa il 66.7 percento dei documenti restituiti è rilevante.
 \end{example}
 
+
+\begin{definition}{Mean Reciprocal Rank (MRR)}
+La \textbf{Mean Reciprocal Rank (MRR)} è una metrica utilizzata nei task di \textit{Information Retrieval}, il cui obiettivo è valutare quanto in alto, nella lista ordinata dei risultati restituiti da un sistema, compare il \textbf{primo documento rilevante} rispetto a una determinata query.
+Cioè devi considerare a partire dall'alto, cioè dalla prima posizione a scendere.
+
+\medskip
+
+\textbf{Reciprocal Rank (RR).}
+
+Consideriamo una query $q$ e supponiamo che il sistema restituisca una lista ordinata di documenti.
+
+Indichiamo con $r_q$ la posizione, a partire da $1$ (quindi dal primo elemento, cioè in prima posizione, si parte da lui), del primo documento rilevante restituito per la query $q$.
+
+Il \textit{Reciprocal Rank} è definito come:
+
+\begin{equation}
+    RR(q) =
+    \begin{cases}
+        \dfrac{1}{r_q}, & \text{se esiste almeno un documento rilevante}, \\[6pt]
+        0, & \text{altrimenti}.
+    \end{cases}
+\end{equation}
+
+Il Reciprocal Rank assume valori nell'intervallo $[0,1]$.
+
+In particolare:
+\begin{itemize}
+    \item Se il primo documento rilevante è in posizione $1$, allora $RR(q)=1$.
+    \item Se è in posizione $2$, allora $RR(q)=\frac{1}{2}=0.5$.
+    \item Se è in posizione $4$, allora $RR(q)=\frac{1}{4}=0.25$.
+    \item Se nessun documento rilevante viene recuperato, allora $RR(q)=0$.
+\end{itemize}
+
+Pertanto, \textbf{più il primo documento rilevante compare in alto nella lista dei risultati, maggiore sarà il Reciprocal Rank}.
+
+\medskip
+
+\textbf{Mean Reciprocal Rank (MRR).}
+
+Un benchmark contiene generalmente più query. Per valutare le prestazioni complessive del sistema, si calcola la media dei Reciprocal Rank ottenuti sulle singole query.
+
+Date $Q$ query, la Mean Reciprocal Rank è definita come:
+
+\begin{equation}
+    \boxed{
+    MRR = \frac{1}{Q}\sum_{q=1}^{Q} RR(q)
+    }
+\end{equation}
+\textbf{Esempio numerico.}
+
+Supponiamo di valutare un sistema su $Q=4$ query, ottenendo i seguenti risultati:
+
+\begin{center}
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{Query} & \textbf{Posizione $r_q$} & \textbf{Reciprocal Rank} \\
+\hline
+$q_1$ & $1$ & $1$ \\
+\hline
+$q_2$ & $2$ & $0.5$ \\
+\hline
+$q_3$ & $4$ & $0.25$ \\
+\hline
+$q_4$ & Nessun risultato rilevante & $0$ \\
+\hline
+\end{tabular}
+\end{center}
+
+Applicando la formula:
+
+\begin{equation}
+\begin{aligned}
+    MRR
+    &= \frac{1}{4}
+    \left(
+        1+\frac{1}{2}+\frac{1}{4}+0
+    \right) \\[6pt]
+    &= \frac{1.75}{4} \\[6pt]
+    &= \boxed{0.4375}.
+\end{aligned}
+\end{equation}
+
+Questo valore rappresenta la media dei Reciprocal Rank ottenuti sulle quattro query.
+
+In generale, \textbf{una MRR più vicina a $1$ indica che il sistema tende a restituire il primo documento rilevante nelle posizioni iniziali della lista}.
+\end{definition}
+
+
 \subsection{Answer Distance}
+\begin{warning}{}
+Nei modelli linguistici autoregressivi, la domanda viene posta alla fine del prompt, soprattutto nei benchmark che valutano la capacità di utilizzare contesti lunghi.
+Tuttavia, non è una regola obbligatoria: dipende da come viene costruito il benchmark.
+\end{warning}
 
 \begin{definition}{Answer Distance}
 La \emph{answer distance} misura la distanza, in numero di token, fra il punto in cui si trova l'informazione necessaria e il punto del contesto dal quale viene formulata la domanda o effettuata la previsione. Permette di studiare la capacità del modello di utilizzare informazioni lontane.
@@ -1010,7 +1130,7 @@ Una frase decisiva si trova intorno al token $2\,000$; la domanda viene posta do
 \begin{equation}
 d=80\,000-2\,000=78\,000\ \text{token}.
 \end{equation}
-Ripetendo lo stesso test con la frase decisiva più vicina alla domanda, è possibile verificare se l'accuratezza cambi in funzione della distanza.
+Quindi la distanza è di 78.000mila token. Ripetendo lo stesso test con la frase decisiva più vicina alla domanda, è possibile verificare se l'accuratezza cambi in funzione della distanza.
 \end{example}
 
 \subsection{Answer Position Bias}
@@ -1027,12 +1147,28 @@ u=\frac{a}{L},\qquad 0\leq u\leq1,
 \end{equation}
 dove $a$ indica la posizione del fatto e $L$ il numero totale di token. Con $u\approx0$ la risposta è vicina all'inizio, con $u\approx0.5$ è nella parte centrale e con $u\approx1$ è vicina alla fine. Questa formalizzazione è un'aggiunta esplicativa alle slide: ciò che esse richiedono è \emph{misurare le prestazioni in funzione della posizione}.
 
+\begin{observation}{}
+    Tutte le metriche che abbiamo visto finora, possono essere utilizzate per contesti lunghi, ovviamente dipende dal tipo di benchmark che stiamo utilizzando, se un benchmark mira a testare un determinato aspetto del sistema, si useranno metriche diverse.
+\end{observation}
+
 \section{Metriche di utilizzo del contesto}
+Quando valutiamo un LLM che lavora con contesti lunghi (Long Context LLM), non ci interessa soltanto sapere se produce una risposta corretta o se le risposte che genera sono corrette.
+Vogliamo anche capire quanto efficacemente il modello \textbf{riesce a utilizzare le informazioni presenti nel contesto che gli abbiamo fornito}.
+In particolare, vogliamo verificare:
+\begin{itemize}
+    \item Se il modello riesce a recuperare informazioni presenti nel contesto.
+    \item Se riesce a utilizzare informazioni molto lontane dalla domanda.
+    \item Se le sue prestazioni peggiorano all'aumentare della distanza delle informazioni rilevanti.
+    \item Se utilizza correttamente informazioni distribuite in diverse parti del contesto.
+\end{itemize}
+\begin{center}
+    Le metriche di utilizzo del contesto sono misure e strumenti di valutazione che permettono di studiare quanto efficacemente un LLM riesca a sfruttare le informazioni presenti nel contesto fornito in input.
+\end{center}
 
 \subsection{Context Degradation Curve}
 
 \begin{definition}{Context Degradation Curve}
-Una \emph{context degradation curve} descrive come una misura di prestazione del modello, per esempio l'accuracy o la perplexity, vari al crescere della distanza in token dall'informazione necessaria al compito.
+Una \emph{context degradation curve} descrive come una misura di prestazione del modello,come per esempio l'accuracy o la perplexity, vari al crescere della distanza in token dall'informazione necessaria al compito.
 \end{definition}
 
 Nel grafico menzionato dalle slide, l'asse orizzontale rappresenta la distanza in token dall'informazione rilevante e l'asse verticale una misura di prestazione. Se si usa l'accuracy, una diminuzione indica una degradazione; se si usa la perplexity, un aumento indica in genere una degradazione predittiva. È importante non confondere le direzioni di interpretazione delle due metriche.
@@ -1051,9 +1187,7 @@ $100\,000$ token & $48\%$
 \end{center}
 Tracciando questi punti si osserva che il successo nel recupero diminuisce con la distanza. I valori sono \emph{puramente illustrativi}: le slide descrivono il tipo di grafico, ma non forniscono una curva quantitativa da riprodurre.
 \end{example}
-
-La curva rende visibili i limiti della gestione delle dipendenze lontane. Una degradazione graduale è diversa da un crollo improvviso, e modelli con la medesima accuracy media possono presentare profili di decadimento differenti. Per una valutazione accurata si dovrebbero controllare anche lunghezza totale, posizione relativa del fatto e difficoltà della domanda.
-
+Quindi questa metrica misura,come variano le prestazioni di un LLM all'aumentare della distanza, misurata in token, tra il fatto (l'informazione necessaria) e la domanda posta al modello.
 \subsection{Context Ablation Sensitivity}
 
 \begin{definition}{Context Ablation Sensitivity}
@@ -1073,6 +1207,10 @@ Una possibile misura della sensibilità è
 \Delta_j=S_{\mathrm{full}}-S_{-j},
 \end{equation}
 quando $S$ è una metrica in cui valori più alti sono migliori. Un grande $\Delta_j>0$ suggerisce che il segmento eliminato fosse utile per il compito. Se invece si usa la perplexity, dove valori più bassi sono migliori, è opportuno invertire la differenza oppure confrontare direttamente la variazione di perdita, dichiarandone il segno.
+
+
+Questo perchè se $S_{-j}$ è alto, allora l'informazione levata, non era molto informativa o utile, perchè il punteggio comunque è alto.
+Se $S_{-j}$ è basso, significa che il punteggio è basso, e quindi l'informazione è molto utile, dato che $S_{-j}$ è basso, la differenza $\Delta$ sarà molto alta.
 
 \begin{example}{Rimozione di un'informazione decisiva}
 Un documento contiene la frase ``Il codice di accesso all'archivio è K72''. Il modello riceve la domanda ``Qual è il codice?''. Con il documento integrale l'accuracy su ripetizioni del test è $0.95$. Rimuovendo la frase diventa $0.20$; rimuovendo un paragrafo irrilevante rimane $0.94$.
@@ -1108,18 +1246,21 @@ Se $\Delta H>0$, l'aggiunta del contesto lungo riduce la perdita media di prediz
 \subsection{Memory Recall Accuracy}
 
 \begin{definition}{Memory Recall Accuracy}
-La \emph{memory recall accuracy} misura la proporzione di fatti conservati nel contesto che un modello riesce a richiamare correttamente quando riceve, spesso molto tempo dopo, una domanda mirata.
+La Memory Recall Accuracy è una metrica utilizzata per valutare la capacità di un LLM di recuperare correttamente informazioni che sono state inserite precedentemente nel suo contesto.
 \end{definition}
 
 È utile per compiti di richiamo fattuale a lunga distanza. Le slide suggeriscono l'impiego di benchmark sintetici, nei quali le dipendenze sono note e controllabili sperimentalmente.
 
 \begin{example}{Richiamo di fatti in un benchmark sintetico}
-Nel contesto vengono inserite venti associazioni arbitrarie, come ``oggetto Q17 $\rightarrow$ colore verde'', distanziate da numerosi paragrafi. Successivamente si chiede il colore di ciascun oggetto. Se il modello risponde correttamente a sedici richieste:
+Si crea un benchmark sintetico, dove il dataset avrà un lungo contesto e nel contesto vengono inserite venti associazioni arbitrarie, come ``oggetto Q17 $\rightarrow$ colore verde'', distanziate da numerosi paragrafi. Successivamente si chiede il colore di ciascun oggetto. Se il modello risponde correttamente a sedici richieste:
 \begin{equation}
 \operatorname{MemoryRecallAccuracy}=\frac{16}{20}=0.8.
 \end{equation}
 L'uso di associazioni arbitrarie riduce la possibilità che il modello risponda basandosi sulle proprie conoscenze generali, senza aver letto il contesto.
+\textbf{Precisamente, per ora non si sa com'è fatto il dataset, per ora sappi semplicemente che si ha un lungo contesto, dove all'interno vengono inserite 20 associazioni}
 \end{example}
+
+\newpage
 
 \subsection{Compression Ratio e Copying Ability}
 
@@ -1142,16 +1283,53 @@ Da un rapporto di $10\,000$ token viene prodotto un riassunto di $500$ token: il
 \subsection{Hallucination Rate vs. Context Length}
 
 \begin{definition}{Hallucination Rate}
-In un compito fondato su documenti, una \emph{hallucination} è un'affermazione generata che non è supportata dal contesto, oppure è in contraddizione con esso. Una possibile \emph{hallucination rate} è
+In un compito fondato su documenti, una \emph{hallucination} è un'affermazione generata che non è supportata dal contesto, oppure è in contraddizione con esso.
+Un'affermazione non deve necessariamente essere falsa per essere considerata un'allucinazione. È sufficiente che non sia supportata dalle fonti fornite.
+Una possibile \emph{hallucination rate} è
 \begin{equation}
 \operatorname{HR}(L)=\frac{\#\text{ affermazioni non supportate con contesto di lunghezza }L}
 {\#\text{ affermazioni valutate con contesto di lunghezza }L}.
 \end{equation}
+La metrica serve a misurare la frequenza con cui il modello genera affermazioni non supportate dal contesto.
 \end{definition}
+\begin{example}{}
+Supponiamo di effettuare un esperimento con un contesto di lunghezza \(L=1000\) token.
+
+Il modello produce 100 affermazioni, delle quali:
+\begin{itemize}
+    \item 90 sono supportate dal documento.
+    \item 10 non sono supportate dal documento.
+\end{itemize}
+Otteniamo:
+\[
+HR(1000)=\frac{10}{100}=0.10
+\]
+
+Quindi il modello presenta un Hallucination Rate del 10%.
+\end{example}
 
 La relazione \emph{Hallucination Rate vs. Context Length}, citata nelle slide, consiste nello studiare come cambia la frequenza di affermazioni non supportate all'aumentare della lunghezza del contesto. Un aumento può segnalare difficoltà nel ricordare informazioni precedenti oppure un disallineamento tra la risposta e le fonti richieste. Anche in questo caso la formula mostrata è una possibile definizione operativa, non una formula esplicitata nelle slide.
 
-Per interpretare l'esperimento, bisogna controllare che i contesti di diverse lunghezze siano comparabili: aggiungere informazioni contraddittorie, per esempio, potrebbe aumentare la difficoltà del compito indipendentemente dalla distanza.
+L'obiettivo è capire se la lunghezza del contesto influenza la capacità del modello di produrre risposte corrette e supportate dalle fonti.
+
+\begin{table}[h]
+    \centering
+    \begin{tabular}{|c|c|c|c|}
+        \hline
+        \textbf{Lunghezza contesto} & \textbf{Affermazioni valutate} & \textbf{Allucinazioni} & \textbf{HR} \\
+        \hline
+        1.000 token & 100 & 5 & 5\% \\
+        \hline
+        5.000 token & 100 & 10 & 10\% \\
+        \hline
+        10.000 token & 100 & 20 & 20\% \\
+        \hline
+        20.000 token & 100 & 30 & 30\% \\
+        \hline
+    \end{tabular}
+    \caption{Hallucination Rate al variare della lunghezza del contesto.}
+    \label{tab:hallucination_rate}
+\end{table}
 
 \section{Principi generali di una valutazione affidabile}
 
@@ -1165,17 +1343,25 @@ Le indicazioni conclusive delle slide possono essere condensate in tre principi 
 
 Un modello potrebbe infatti ottenere una buona accuracy su domande localizzate alla fine del testo, ma fallire quando i fatti vengono spostati nella prima metà; potrebbe recuperare bene singole frasi, ma combinare male informazioni remote; oppure potrebbe mantenere buona fluidità grammaticale generando contraddizioni. Solo valutazioni complementari rendono visibili queste differenze.
 
+\newpage
+
 \section{Approcci sperimentali alla long-context evaluation}
 
 \subsection{Synthetic Benchmarks}
 
 \begin{definition}{Synthetic Benchmark}
-Un \emph{synthetic benchmark} è un insieme di prove costruite artificialmente in modo da conoscere in anticipo le risposte corrette e controllare specifiche variabili sperimentali, come la distanza fra un fatto e la sua domanda.
+Un Synthetic Benchmark (benchmark sintetico), è una particolare tipologia di benchmark utilizzata per valutare le prestazioni di un modello di intelligenza artificiale, come un LLM.
+\\
+Un synthetic benchmark serve a valutare una capacità specifica del modello attraverso test artificiali e controllati, isolando i fattori che possono influenzarne le prestazioni.
+
+In questo tipo di benchmark, costruiamo noi i test e conosciamo in anticipo la risposta corretta, ma essendo artificiale, potrebbe non rappresentare fedelmente le difficoltà delle situazioni reali.
 \end{definition}
-
-Le slide descrivono prompt progettati con risposte note e collocate a distanze differenti. Lo scopo è realizzare esperimenti controllati, nei quali l'effetto della posizione o della lunghezza possa essere isolato. Per esempio, si può generare un documento di $100\,000$ token contenente una sola coppia codice--oggetto e ripetere la prova spostando la coppia in varie posizioni.
-
-Il vantaggio principale è la controllabilità; la limitazione è il possibile divario rispetto ai testi e alle richieste del mondo reale.
+In un Synthetic Benchmark, il dataset sarà composto da una serie di esempi costruiti artificialmente, ognuno contenente:
+\begin{itemize}
+    \item Input (prompt): il documento che viene fornito al modello, insieme alla domanda. (\textbf{creato artificialmente})
+    \item Ground Truth: la risposta corretta, che conosciamo già perché abbiamo creato noi il test.
+    \item Variabili sperimentali: ad esempio, la lunghezza del documento e la posizione dell'informazione da recuperare. (\textbf{ovviamente messe artificilamente})
+\end{itemize}
 
 \subsection{Needle-in-a-Haystack (NIAH)}
 
@@ -1192,8 +1378,50 @@ Un protocollo tipico prevede:
 \item ripetere variando la lunghezza del contesto e la posizione dell'informazione.
 \end{enumerate}
 
-\begin{example}{Un ago in un contesto di molte pagine}
-Si inserisce, in mezzo a un rapporto, la frase ``La parola d'ordine del laboratorio è ZAFIRO-41''. Il resto del testo non contiene la parola d'ordine. Alla fine si chiede ``Qual è la parola d'ordine del laboratorio?''. L'esperimento riesce se il modello risponde ``ZAFIRO-41''. Spostando la frase all'inizio, a metà e alla fine del contesto si osserva l'eventuale \emph{position bias}; cambiando la lunghezza del rapporto si studia la capacità di retrieval su distanze crescenti.
+\begin{example}{Esempio in questo tipo di benchmark}
+Il dataset in questo tipo di benchmark è fatto in questo modo:
+
+\begin{center}
+    \centering
+    \small
+    \begin{tabular}{|c|p{7cm}|c|c|}
+        \hline
+        \textbf{Esempio} &
+        \textbf{Documento (Haystack + Needle)} &
+        \textbf{Posizione} &
+        \textbf{Ground Truth} \\
+        \hline
+
+        1 &
+        \textbf{Il codice è 4729.} \ldots\
+        [altro testo] &
+        Inizio & 4729 \\
+        \hline
+
+        2 &
+        [altro testo] \ldots\
+        \textbf{Il codice è 4729.} \ldots\
+        [altro testo] &
+        Centro & 4729 \\
+        \hline
+
+        3 &
+        [altro testo] \ldots\
+        \textbf{Il codice è 4729.} &
+        Fine & 4729 \\
+        \hline
+    \end{tabular}
+\end{center}
+\noindent\textit{Esempio di dataset per il benchmark NIAH.}
+
+A ogni esempio viene associata la stessa domanda:
+\begin{quote}
+    \emph{Qual è il codice segreto?}
+\end{quote}
+
+La risposta corretta (\emph{Ground Truth})
+è sempre \textbf{4729}.
+
 \end{example}
 
 Un NIAH semplice misura soprattutto il \emph{recupero} di un'informazione isolata; non dimostra necessariamente capacità di ragionamento, sintesi, comprensione narrativa o integrazione di più fatti. Per analizzare queste competenze occorrono compiti più complessi.
@@ -1208,27 +1436,71 @@ Un modello riceve la trascrizione di una lunga riunione e deve individuare la de
 
 Rispetto ai benchmark sintetici, gli scenari reali coprono una gamma più ampia di difficoltà, ma è spesso più complicato stabilire una ground truth unica e separare gli effetti delle diverse variabili sperimentali.
 
-\subsection{Truncation Analysis ed effective context window}
 
-\begin{definition}{Truncation Analysis}
-La \emph{truncation analysis} consiste nel tagliare l'input a lunghezze differenti e confrontare la prestazione del modello. Serve a studiare quanta parte del contesto disponibile viene realmente sfruttata per il compito.
-\end{definition}
+\subsubsection{Truncation Analysis}
 
-Supponiamo di avere un testo di lunghezza $L$ e di valutare il modello con prefissi o porzioni di lunghezza $\ell_1,\ell_2,\ldots,\ell_m$, dove $\ell_j\leq L$. Per ogni lunghezza si misura una prestazione $S(\ell_j)$. La dipendenza funzionale
-\begin{equation}
-\ell\longmapsto S(\ell)
-\end{equation}
-permette di osservare se l'accesso a un contesto maggiore migliori realmente i risultati e in quali condizioni.
+La \textit{Truncation Analysis} è una tecnica di
+valutazione sperimentale utilizzata per studiare
+come le prestazioni di un Large Language Model (LLM)
+variano in funzione della lunghezza del contesto
+fornito in input.
 
-\begin{definition}{Effective Context Window}
-L'\emph{effective context window} è, in senso operativo, l'estensione del contesto che un modello riesce a sfruttare in modo utile e affidabile per il task considerato. Non coincide necessariamente con il limite massimo di token che l'architettura accetta in input.
-\end{definition}
+A differenza di un benchmark, che consiste in un
+insieme di test, dati e criteri di valutazione,
+la Truncation Analysis rappresenta una metodologia
+applicabile a diversi benchmark.
 
-\begin{example}{Finestra nominale e finestra effettiva}
-Un modello accetta tecnicamente fino a $128\,000$ token. In un esperimento di domanda-risposta, tuttavia, le sue prestazioni migliorano fino a $32\,000$ token e poi rimangono invariate oppure peggiorano. La finestra nominale resta $128\,000$, ma la regione di utilizzo effettivamente vantaggioso, \emph{per quel test}, può essere molto più limitata. Non è possibile attribuire un'unica finestra effettiva assoluta senza specificare task, dataset e criterio di prestazione.
-\end{example}
+La tecnica consiste nel creare più versioni dello
+stesso prompt, riducendo progressivamente la
+lunghezza del contesto, e nel valutare le
+prestazioni del modello su ciascuna versione.
 
-\textbf{Cautela}: tagliare un documento può eliminare proprio l'informazione necessaria a rispondere. Una diminuzione dell'accuracy in quel caso è attesa e non prova che il modello non sia capace di utilizzare un contesto lungo. Occorre progettare il confronto in modo da distinguere \emph{assenza di informazioni rilevanti} e \emph{incapacità di utilizzare informazioni presenti}.
+Ad esempio, dato un documento di 100.000 token,
+si possono costruire i seguenti test:
+
+\begin{table}[ht]
+    \centering
+    \begin{tabular}{|c|c|}
+        \hline
+        \textbf{Test} &
+        \textbf{Lunghezza del contesto} \\
+        \hline
+        1 & 10.000 token \\
+        \hline
+        2 & 30.000 token \\
+        \hline
+        3 & 60.000 token \\
+        \hline
+        4 & 100.000 token \\
+        \hline
+    \end{tabular}
+    \caption{Esempio di Truncation Analysis.}
+    \label{tab:truncation_analysis}
+\end{table}
+
+Per ogni lunghezza viene posta la stessa domanda
+al modello e viene misurata la prestazione ottenuta,
+ad esempio attraverso l'accuratezza delle risposte.
+
+L'obiettivo è determinare se l'aumento della
+quantità di contesto disponibile comporti
+un miglioramento delle prestazioni oppure se,
+oltre una certa lunghezza, queste tendano
+a stabilizzarsi o peggiorare.
+
+Questa analisi permette di studiare la
+\textit{Effective Context Window}, ovvero
+la quantità di contesto che il modello riesce
+a sfruttare efficacemente per un determinato task.
+
+È importante che la riduzione del contesto
+non elimini le informazioni necessarie per
+rispondere alla domanda. In caso contrario,
+un peggioramento delle prestazioni potrebbe
+dipendere dall'assenza delle informazioni
+rilevanti, anziché dall'incapacità del modello
+di utilizzare contesti lunghi.
+
 
 \section{Sfide aperte e questioni di ricerca}
 
