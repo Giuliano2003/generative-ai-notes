@@ -860,10 +860,7 @@ Questo approccio può valutare caratteristiche che non sono facilmente espresse 
 \item \textbf{Faithfulness}: la risposta resta fedele ai documenti o alle fonti fornite, evitando dettagli non giustificati?
 \item \textbf{Style}: il registro e l'organizzazione del testo sono appropriati al compito?
 \end{itemize}
-
-Si tratta di una soluzione sempre più diffusa nella valutazione di task \emph{open-ended} su contesti lunghi, dove non esiste una singola risposta testuale esatta. Un possibile protocollo consiste nel fornire al valutatore il testo di riferimento, la richiesta, la risposta del sistema e una \emph{rubric} che descriva come assegnare un punteggio da $1$ a $5$ per la fedeltà. L'LLM restituisce il voto e una giustificazione.
-
-\textbf{Precisazione metodologica}: questo approccio non è automaticamente oggettivo. Il valutatore può essere influenzato dalla formulazione del prompt, dalla lunghezza della risposta, dall'ordine delle candidate e dai propri errori. Per risultati più affidabili si possono usare criteri espliciti, controlli umani, confronti in ordine variato e più valutatori. Questi accorgimenti ampliano il contenuto sintetico delle slide.
+\emph{LLM-as-a-Judge} è un metodo di valutazione, cioè ci sono tanti metodi di valutazioni (come usare metriche "stand-alone", o usare alcune piu sofisticate), e noi scegliamo di valutare tramite un LLM, una metrica poi potrebbe essere usata dall'LLM.
 
 \newpage
 
@@ -956,7 +953,7 @@ La prima ammette una risposta verificabile con Exact Match; la seconda richiede 
 Quindi quando creo un benchmark, quello che devo tenere in considerazione prima di tutto è che task (o piu task) voglio valutare, e se questo è \textbf{open-ended} o \textbf{close-ended}, piu precisamente:
 \begin{itemize}
     \item Dataset: contiene gli esempi sui quali valutiamo la capacità del modello di svolgere quel task.
-    \item Protocollo: stabilisce come il modello deve affrontare il task durante la valutazione.
+    \item Protocollo: stabilisce come il modello deve affrontare il task durante la valutazione (ad esempio il Needle-in-the-Haystack).
     \item Metrica: misura quanto bene il modello svolge il task.
 \end{itemize}
 
