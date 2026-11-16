@@ -2565,3 +2565,53 @@ fondamentali della valutazione sperimentale.
     le sequenze specifiche associate
     ai progetti fittizi.
 \end{observation}
+
+
+\section{Principali tipologie di Fine-Tuning}
+
+Il \textbf{Fine-Tuning} consiste nell'adattare un modello
+pre-addestrato a nuovi dati o a specifici comportamenti.
+Si distinguono quattro principali approcci, in base
+all'obiettivo dell'addestramento.
+
+\begin{enumerate}
+    \item \textbf{Continued Pretraining (CPT):}
+    consiste nel proseguire l'addestramento del modello
+    su un nuovo corpus di testi, generalmente mediante
+    \textit{Next Token Prediction}. L'obiettivo è adattare
+    le conoscenze del modello ai nuovi dati, senza
+    richiedere coppie esplicite input-output.
+
+    \item \textbf{Supervised Fine-Tuning (SFT):}
+    consiste nell'addestrare il modello su esempi
+    supervisionati, tipicamente coppie istruzione-risposta.
+    L'obiettivo è insegnare al modello a generare
+    la risposta desiderata a partire da un determinato input.
+
+    \item \textbf{Preference Fine-Tuning (es. DPO):}
+    consiste nell'ottimizzare il modello utilizzando
+    dati di preferenza, ad esempio coppie di risposte
+    preferite e non preferite. L'obiettivo è favorire
+    la generazione delle risposte considerate migliori.
+
+    \item \textbf{Reinforcement Learning Fine-Tuning
+    (es. PPO, GRPO):}
+    consiste nell'ottimizzare il comportamento del modello
+    attraverso segnali di ricompensa (\textit{reward}).
+    L'obiettivo è aumentare la probabilità di generare
+    risposte che ottengono ricompense elevate.
+\end{enumerate}
+
+\noindent
+\textbf{Osservazione.}
+Questi approcci si distinguono dalle tecniche utilizzate
+per aggiornare i parametri del modello. In particolare,
+il \textbf{Full Fine-Tuning} aggiorna tutti i parametri,
+mentre le tecniche di \textbf{Parameter-Efficient Fine-Tuning
+(PEFT)}, come \textbf{LoRA}, aggiornano soltanto un numero
+limitato di parametri o introducono parametri aggiuntivi
+addestrabili.
+
+Pertanto, LoRA può essere utilizzato in combinazione
+con diversi approcci di Fine-Tuning, come CPT e SFT.
+
