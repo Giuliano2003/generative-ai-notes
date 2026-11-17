@@ -1,5 +1,4 @@
 \documentclass{csnotes}
-\usepackage{xcolor}
 \usepackage[italian]{babel}
 \usepackage{geometry}
 \usepackage{graphicx}
@@ -7,6 +6,8 @@
 \definecolor{altrow}{RGB}{248, 249, 250}
 \usepackage[table]{xcolor}
 \usepackage{tabularx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}
 \geometry{
     top=2cm,
     bottom=2cm,
@@ -26,26 +27,204 @@
 \academicyear{Academic Year 2026/2027}
 
 \begin{document}
+\begin{titlepage}
 \thispagestyle{empty}
-\begin{flushright}
-    \small
-    \textbf{Generative Artificial Intelligence}\\
-    \textit{Scritto da : Giuliano Savino}
-\end{flushright}
+\centering
 
-\vspace{-0.15cm}
-\noindent
-\textcolor{blue!60!black}{\rule{\textwidth}{1.2pt}}
+% Palette del frontespizio
+\definecolor{coverblue}{RGB}{31,71,133}
+\definecolor{coverlight}{RGB}{235,242,250}
+\definecolor{coveraccent}{RGB}{45,150,160}
+
+% Intestazione
+{\large\bfseries\color{coverblue}
+Università degli Studi di Napoli Federico II\par}
+
+\vspace{0.35cm}
+
+{\small
+Dipartimento di Ingegneria Elettrica\\
+e delle Tecnologie dell'Informazione\par}
+
+\vspace{0.25cm}
+
+{\small
+Corso di Laurea Magistrale in Informatica\par}
+
+\vspace{0.7cm}
+
+{\color{coverblue}\rule{\textwidth}{1.1pt}}
+
 \vfill
-\begin{center}
 
-    {\Large \textbf{Generative Artificial Intelligence}}\\[0.2cm]
-        
-    {\large \textit{Scritto da : Giuliano Savino}}
+% Titolo
+{\small\bfseries\color{coverblue}
+A P P U N T I\par}
 
-\end{center}
+\vspace{0.45cm}
+
+{\fontsize{36}{42}\selectfont\bfseries
+\color{coverblue}
+Generative\\[0.1cm]
+Artificial Intelligence\par}
+
+\vspace{0.5cm}
+
+{\large\color{black!55}
+Modelli, linguaggio e generazione\par}
+
+\vspace{1cm}
+
+% Illustrazione simbolica:
+% dal prompt alla generazione attraverso una rete neurale
+\begin{tikzpicture}[
+    x=1cm,
+    y=1cm,
+    >=Stealth,
+    neuron/.style={
+        circle,
+        draw=coverblue,
+        line width=0.8pt,
+        fill=white,
+        minimum size=5.5mm,
+        inner sep=0pt
+    },
+    token/.style={
+        rounded corners=3pt,
+        draw=coverblue!20,
+        fill=coverlight,
+        minimum width=1.7cm,
+        minimum height=0.65cm,
+        font=\small,
+        text=coverblue
+    }
+]
+
+    % Fondo dell'illustrazione
+    \fill[
+        coverlight!65,
+        rounded corners=18pt
+    ] (-0.7,-2.05) rectangle (6.7,2.05);
+
+    % Collegamenti fra i livelli della rete
+    \foreach \ya in {-1.1,0,1.1} {
+        \foreach \yb in {-1.5,-0.5,0.5,1.5} {
+            \draw[
+                coverblue!22,
+                line width=0.6pt
+            ] (0.6,\ya) -- (3,\yb);
+
+            \draw[
+                coverblue!22,
+                line width=0.6pt
+            ] (3,\yb) -- (5.4,\ya);
+        }
+    }
+
+    % Alcuni percorsi in evidenza
+    \draw[
+        coveraccent,
+        line width=1.1pt,
+        opacity=0.8
+    ] (0.6,0) -- (3,0.5) -- (5.4,1.1);
+
+    \draw[
+        coveraccent,
+        line width=1.1pt,
+        opacity=0.8
+    ] (0.6,-1.1) -- (3,-0.5) -- (5.4,0);
+
+    % Neuroni dei livelli esterni
+    \foreach \y in {-1.1,0,1.1} {
+        \node[neuron] at (0.6,\y) {};
+        \node[neuron] at (5.4,\y) {};
+    }
+
+    % Neuroni del livello centrale
+    \foreach \y in {-1.5,-0.5,0.5,1.5} {
+        \node[
+            neuron,
+            fill=coverlight
+        ] at (3,\y) {};
+    }
+
+    % Nodi attivi
+    \node[
+        neuron,
+        draw=coveraccent,
+        fill=coveraccent!18
+    ] at (3,0.5) {};
+
+    \node[
+        neuron,
+        draw=coveraccent,
+        fill=coveraccent!18
+    ] at (5.4,1.1) {};
+
+    % Prompt
+    \node[token] (prompt) at (-2.15,0)
+        {Prompt};
+
+    \draw[
+        ->,
+        coverblue!60,
+        thick
+    ] (prompt.east) -- (0.1,0);
+
+    % Output generato
+    \node[
+        token,
+        draw=coveraccent!35,
+        fill=coveraccent!10,
+        text=coveraccent!80!black,
+        align=center
+    ] (output) at (8.15,0)
+        {Testo\\generato};
+
+    \draw[
+        ->,
+        coveraccent,
+        thick
+    ] (5.9,0) -- (output.west);
+
+    % Didascalia interna
+    \node[
+        font=\scriptsize,
+        text=coverblue!65
+    ] at (3,-2.5)
+        {Rappresentazioni apprese e generazione};
+
+\end{tikzpicture}
+
+\vspace{0.5cm}
+
+{\small\color{black!50}
+Language Models
+\enspace$\cdot$\enspace
+Transformer
+\enspace$\cdot$\enspace
+Alignment\par}
 
 \vfill
+
+% Autore
+{\small\color{black!55}A cura di\par}
+
+\vspace{0.15cm}
+
+{\Large\bfseries\color{coverblue}
+Giuliano Savino\par}
+
+\vspace{0.9cm}
+
+{\color{coverblue}\rule{\textwidth}{0.5pt}}
+
+\vspace{0.35cm}
+
+{\small\color{black!55}
+Anno Accademico 2026/2027\par}
+
+\end{titlepage}
 
 \tableofcontents
 \newpage

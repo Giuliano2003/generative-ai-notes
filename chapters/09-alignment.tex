@@ -181,7 +181,9 @@ l'Inference.
     \includegraphics[width=0.8\textwidth]{_files/_images/placeholder_figura_4_1.png}
     \caption{Schema del processo di sviluppo
     pre-train-then-align. Il Pre-training mediante next-token
-    prediction è seguito da due tipi di Fine-Tuning (SFT e Reward Model), che consentono l'allineamento.}
+    prediction è seguito da due tipi di Fine-Tuning (SFT e Reward Model), che consentono l'allineamento.
+    SFT e RLHF fanno parte della fase di Post-Training, in generale in Fine-Tuning, fa parte della fase di Post-Training.
+    Mentre l'inferenza è la terza grande fase, dopo il Pre-Training e il Fine-Tuning}
     \label{fig:alignment-pipeline}
 \end{figure}
 
@@ -418,7 +420,9 @@ equivalentemente, di minimizzarne l'opposto:
 \log \Pr_{\theta}(y_i\mid x,y_{<i}).
 \]
 Quest'ultima espressione esplicita il collegamento con la loss.
-
+\[
+\boxed{\tilde{\theta}=\arg\min_\theta\mathcal{L_{SFT}}(\theta)}
+\]
 \begin{observation}{Teacher Forcing}
 Durante il Supervised Fine-Tuning si utilizza la tecnica del
 \textbf{Teacher Forcing}: per predire il token $y_i$, il modello
@@ -540,24 +544,37 @@ La formulazione precedente descrive un problema
 \textbf{single-round}: a una richiesta segue una risposta,
 senza ulteriori interazioni.
 
+Viene detta single-round, perchè il dataset di fine-tuning è definito come:
+\[
+D=\{(x_1,y_1),(x_2,y_2),\ldots,(x_N,y_N)\}
+\]
+Quindi il modello viene addestrato a massimizzare:
+\[
+\tilde{\theta}=\arg\max_\theta
+\sum_{(x,y)\in D}\log P_\theta(y\mid x)
+\]
+
+Il punto è che ogni risposta viene appresa in funzione della singola richiesta, senza considerare esplicitamente i turni precedenti di una conversazione.
+
+
 In una conversazione \textbf{multi-round}, invece,
 ogni risposta dipende sia dalla richiesta corrente
 sia dalla storia precedente.
+E quindi gli esempi che contiene il dataset multi-round \textbf{contengono intere osservazioni}
 
-L'esempio del libro riguarda un assistente sanitario
-conversazionale. L'utente riferisce inizialmente stanchezza;
-il chatbot chiede se siano presenti altri sintomi;
-l'utente menziona mal di testa frequenti;
-il chatbot domanda da quanto tempo;
-l'utente risponde che i sintomi durano da circa una settimana.
-Il dialogo prosegue con la proposta di rivolgersi
-a un professionista e con la richiesta di un appuntamento
-dopo l'orario di lavoro.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{_files/_images/conversation.png}
+    \caption{SFT di un modello conversazionale.
+    La sequenza alterna interventi dell'utente e risposte
+    del chatbot..}
+    \label{fig:sft-conversazionale}
+\end{figure}
 
 Il punto rilevante è che ogni risposta richiede di tenere conto
 delle informazioni accumulate nei turni precedenti.
 
-Siano presenti $K$ turni:
+Considera una conversazione di $K$ turni (che alla fine sarà considerato un example del dataset multi-round):
 \[
 \{x^1,y^1,x^2,y^2,\ldots,x^K,y^K\},
 \]
@@ -579,9 +596,66 @@ L'obiettivo per una conversazione è
 \tag{4.5}
 \]
 
+Supponiamo che il dataset di fine-tuning contenga \(N\) conversazioni:
+\[
+D=\{C_1,C_2,\ldots,C_N\}
+\]
+
+Ogni conversazione \(C_i\) contiene \(K_i\) turni.
+
+Allora possiamo scrivere la funzione obiettivo completa come:
+\[
+\boxed{
+\tilde{\theta}=
+\arg\max_\theta
+\sum_{i=1}^{N}
+\sum_{k=1}^{K_i}
+\log P_\theta
+\left(
+y_i^k\mid
+x_i^1,y_i^1,\ldots,x_i^k
+\right)
+}
+\]
+ 
+che equivale a minimizzare la loss:
+\[
+\mathcal{L}(\theta)=
+-\sum_{i=1}^{N}\sum_{k=1}^{K_i}
+\log P_\theta(y_i^k\mid x_i^1,y_i^1,\ldots,x_i^k)
+\]
+\label{loss_bella}
+
+otteniamo:
+\[
+\boxed{\tilde{\theta}=\arg\min_\theta\mathcal{L}(\theta)}
+\]
+
 \paragraph{Implementazione efficiente del multi-round.}
-Una soluzione diretta consisterebbe nell'eseguire il modello
-$K$ volte, fornendo ogni volta una storia più lunga.
+Una soluzione diretta \textbf{per calcolare la loss di cui sopra} consisterebbe nell'eseguire il modello
+$N K_i$ volte, fornendo ogni volta una storia più lunga.
+\begin{observation}{}
+Nell'implementazione diretta (meno efficiente), il modello viene eseguito separatamente per ogni turno della conversazione, ricevendo ogni volta un contesto progressivamente più lungo, che comprende la richiesta corrente e tutti i turni precedenti.
+
+Supponiamo che il dataset contenga una sola conversazione ($N=1$), composta da $K$ turni.
+
+Per calcolare la loss:
+\begin{enumerate}
+    \item Al primo turno, il modello riceve $x^1$ e calcola la log-probabilità della risposta corretta $y^1$.
+    \item Al secondo turno, riceve il contesto $[x^1,y^1,x^2]$ e calcola la log-probabilità della risposta corretta $y^2$.
+    \item Il procedimento continua fino al turno $K$, considerando ogni volta l'intera storia conversazionale precedente.
+\end{enumerate}
+
+La loss complessiva si ottiene sommando le log-probabilità negative delle risposte corrette di tutti i turni:
+
+$$
+\mathcal{L}(\theta)=-\sum_{k=1}^{K}\log P_\theta(y^k\mid x^1,y^1,\ldots,x^k)
+$$
+
+
+Questa implementazione è meno efficiente perché richiede $K$ forward pass, rielaborando ripetutamente i messaggi dei turni precedenti.
+\end{observation}
+
 
 Una soluzione più efficiente consiste nel rappresentare
 l'intera conversazione come una sola sequenza:
@@ -631,39 +705,51 @@ Su un dataset $D$ di conversazioni, l'obiettivo diventa
 \tag{4.7}
 \]
 sempre con il masking dei contributi degli input dell'utente.
+\begin{observation}{}
+Nell'implementazione efficiente del multi-round SFT, l'intera conversazione viene concatenata in un'unica sequenza:
 
-\paragraph{Chiarimento intuitivo.}
-Durante l'addestramento, tutte le risposte annotate
-sono già presenti nella sequenza. Il modello può quindi
-calcolare in un unico passaggio le predizioni relative
-ai diversi turni, mantenendo il vincolo autoregressivo:
-ogni posizione utilizza soltanto il contesto precedente.
+$$
+\mathrm{seq}=[x^1,y^1,x^2,y^2,\ldots,x^K,y^K]
+$$
 
-Questo non significa che, durante l'utilizzo,
-il modello conosca in anticipo i futuri interventi
-dell'utente.
+Questa sequenza viene fornita interamente al modello, che attraverso un unico forward pass calcola le distribuzioni di probabilità condizionate per i token della sequenza.
 
-\begin{figure}[h]
-    \centering
-    \IfFileExists{placeholder_figura_4_3.pdf}{
-        \includegraphics[width=0.8\textwidth]{placeholder_figura_4_3}
-    }{
-        \fbox{\parbox{0.8\textwidth}{
-            \centering
-            \vspace{1cm}
-            Segnaposto della figura 4.3
-            \vspace{1cm}
-        }}
-    }
-    \caption{SFT di un modello conversazionale.
-    La sequenza alterna interventi dell'utente e risposte
-    del chatbot. Le probabilità degli interventi dell'utente
-    non contribuiscono alla loss; contribuiscono invece
-    quelle delle risposte, condizionate all'intera storia
-    precedente. L'esempio illustrato riguarda il dialogo
-    con un assistente sanitario.}
-    \label{fig:sft-conversazionale}
-\end{figure}
+Questo è possibile grazie alla causal attention mask, che impedisce a ciascuna posizione di utilizzare informazioni provenienti dai token futuri. Di conseguenza, ogni token viene predetto considerando esclusivamente il contesto precedente, anche se l'intera conversazione viene elaborata contemporaneamente.
+
+\textbf{Questo è lo stesso procedimento che si è fatto nel pre-training dei Decoder Only Transformer.}
+
+Successivamente, attraverso il loss masking, vengono esclusi dal calcolo della loss i token relativi agli interventi dell'utente ($x^k$), mantenendo soltanto quelli appartenenti alle risposte dell'assistente ($y^k$).
+
+In questo modo, la loss complessiva viene calcolata con un unico forward pass:
+
+$$
+\mathcal{L}(\theta)=
+-\sum_{k=1}^{K}\log P_\theta(y^k\mid x^1,y^1,\ldots,x^k)
+$$
+
+Questa soluzione è più efficiente perché evita di eseguire il modello separatamente per ciascun turno e di rielaborare ripetutamente la storia conversazionale.
+\end{observation}
+
+\paragraph{Chiarimento.}
+Quindi, il libro ci sta mostrando due implementazioni alternative per calcolare la stessa funzione di loss nel multi-round SFT.
+
+Infatti, se sviluppiamo la formulazione 4.7 otteniamo la stessa loss definita sull'intero dataset:
+
+$$
+\mathcal{L}(\theta)=
+-\sum_{i=1}^{N}\sum_{k=1}^{K_i}
+\log P_\theta(y_i^k\mid x_i^1,y_i^1,\ldots,x_i^k)
+$$
+
+Quindi, \textbf{la funzione obiettivo non cambia: cambia soltanto il modo in cui viene calcolata.}
+\begin{enumerate}
+    \item Implementazione diretta (meno efficiente): il modello viene eseguito separatamente per ogni turno, ricevendo ogni volta un contesto progressivamente più lungo. La loss viene calcolata per ciascuna risposta e successivamente sommata.
+    \item Implementazione efficiente: tutti i turni di una conversazione vengono concatenati in un'unica sequenza, indicata con $\mathrm{seq}$. Grazie alla *causal attention mask*, il modello può elaborare l'intera conversazione in un solo forward pass, mentre il *loss masking* permette di considerare nella loss soltanto i token delle risposte dell'assistente.
+
+\end{enumerate}
+In conclusione, il libro introduce $\mathrm{seq}$ per mostrare come sia possibile calcolare la stessa loss in maniera computazionalmente più efficiente, evitando di rielaborare ripetutamente il contesto dei turni precedenti.
+
+\newpage
 
 \paragraph{Problemi pratici: dati annotati.}
 SFT richiede dati annotati, mentre il Pre-training
@@ -686,6 +772,7 @@ di ridurre i costi di costruzione del dataset
 e di addestramento. La qualità del modello dipende
 fortemente dai dati utilizzati, che devono essere
 sviluppati e controllati con attenzione.
+
 
 \paragraph{Problemi pratici: costo computazionale.}
 SFT resta costoso a causa delle dimensioni degli LLM.
@@ -712,7 +799,7 @@ e i lavori di Houlsby et al.\ (2019),
 Hu et al.\ (2022) e Han et al.\ (2024).
 
 \paragraph{Problemi pratici: preservazione delle conoscenze.}
-SFT è una fase di \textbf{Post-training}:
+SFT è una fase di \textbf{Post-training} (come tutto il Fine-Tuning, è una fase di Post-Training):
 deve introdurre gli adattamenti desiderati preservando
 i vantaggi del Pre-training.
 
@@ -739,6 +826,8 @@ La semplicità formale di SFT non elimina quindi
 la necessità di un significativo lavoro sperimentale
 e ingegneristico.
 
+\newpage
+
 \subsubsection{Acquisizione dei dati di Fine-tuning}
 
 La costruzione dei dati è una componente centrale
@@ -746,8 +835,8 @@ dell'Instruction Fine-tuning. Il testo distingue
 \textbf{generazione manuale} e
 \textbf{generazione automatica}.
 
-\paragraph{Generazione manuale: costruzione di coppie annotate.}
-Un primo approccio consiste nel reclutare annotatori
+\subsubsection{Manually Generated Data.}
+Un primo approccio per la generazione manuale del dataset di fine-tuning consiste nel reclutare annotatori umani
 per costruire coppie input--output relative ai task
 di interesse.
 
@@ -756,7 +845,7 @@ di una classe a un testo già raccolto, la costruzione
 di dati per gli LLM richiede ulteriori passaggi.
 
 Per un task di traduzione dall'inglese al cinese,
-si costruisce anzitutto un prompt template:
+\textbf{si costruisce anzitutto un prompt template} (quello che vedi sotto è un template):
 \begin{quote}
 \textbf{Istruzione:} Traduci il testo dall'inglese al cinese.
 
@@ -769,50 +858,93 @@ si costruisce anzitutto un prompt template:
 
 Successivamente si raccolgono coppie di testi sorgente
 e traduzioni e si sostituiscono i campi del template.
+Per esempio, data una coppia di frasi Inglese e Cinesi:
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{_files/_images/eng-cin.png}
+    \label{fig:self-instruct}
+\end{figure}
+\\
+Possiamo generare a fine-tuning sample usando il template che abbiamo appena creato in questo modo:
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{_files/_images/cin_cen.png}
+    \label{fig:self-instruct}
+\end{figure}
 
-L'esempio del libro utilizza la domanda inglese
-\emph{How's the weather today?} e la sua traduzione
-cinese. L'input $x$ comprende l'istruzione e la domanda,
-separate da un ritorno a capo; l'output $y$
-è la traduzione.
 
-La coppia così costruita viene utilizzata in SFT
-con l'obiettivo già descritto.
+Che corrisponde a:
+\begin{itemize}
+    \item $x$ = Translate the text from English to Chinese. How's the weather today?
+    \item $y$ = "frase giapponese"
+\end{itemize}
+E questa coppia andrà nel dataset di fine-tuning.
 
-\paragraph{Difficoltà dei prompt template.}
-Uno stesso task può essere espresso attraverso molti
-template diversi. Annotatori differenti possono
-produrre istruzioni di qualità e complessità diverse,
-talvolta troppo lunghe o inutilmente complesse.
 
-In altri casi, può essere difficile persino identificare
-con precisione il task o descriverlo adeguatamente.
 
-Una strategia diffusa consiste nel partire da
-\textbf{task e benchmark NLP esistenti}, per i quali
-sono già disponibili descrizioni ed esempi.
-Gli annotatori possono riformulare tali task
-come istruzioni per un LLM.
+\begin{observation}{Difficoltà nella creazione dei prompt template}
 
-Questo approccio semplifica il lavoro, ma richiede comunque:
+La principale difficoltà nella costruzione di un dataset per il
+Supervised Fine-Tuning (SFT) non consiste nel riempire i template
+con gli esempi disponibili, ma nel \textbf{progettare prompt template
+chiari, coerenti e capaci di rappresentare correttamente il task}.
+
+In particolare, emergono due problematiche principali:
 
 \begin{itemize}
-    \item linee guida di annotazione;
+    \item \textbf{Uno stesso task può essere descritto attraverso
+    template differenti.}
 
-    \item un formato condiviso per i template;
+    Ad esempio, il task di traduzione dall'inglese al cinese può
+    essere espresso mediante istruzioni diverse.
 
-    \item strumenti di gestione dell'annotazione
-    e del crowdsourcing;
+    Annotatori differenti possono produrre istruzioni con livelli
+    di qualità e complessità differenti. Alcune potrebbero risultare
+    troppo lunghe, ambigue o inutilmente complesse.
 
-    \item procedure di controllo della qualità.
+    \item \textbf{Alcuni task sono difficili da identificare
+    e descrivere correttamente.}
+
+    In determinati casi, non è immediato comprendere quale
+    operazione debba eseguire il modello oppure come trasformarla
+    in un'istruzione chiara e precisa.
 \end{itemize}
 
-Una volta definiti i template, i dataset annotati
-già disponibili permettono di produrre molti esempi
-riempiendone automaticamente i campi.
+\textbf{Possibile soluzione:}
+
+Una strategia consiste nel partire da \textbf{task e benchmark NLP
+già esistenti}, che forniscono descrizioni dei compiti ed esempi
+annotati.
+
+Gli annotatori possono quindi utilizzare queste informazioni
+per formulare istruzioni appropriate per gli LLM.
+
+Tuttavia, questo approccio richiede comunque:
+
+\begin{itemize}
+    \item Linee guida per gli annotatori;
+    \item Un formato condiviso per i prompt template;
+    \item Strumenti per gestire il processo di annotazione
+    e crowdsourcing;
+    \item Procedure di controllo della qualità.
+\end{itemize}
+
+\textbf{Conclusione:}
+
+Una volta definiti correttamente i prompt template, è possibile
+generare automaticamente numerosi esempi di fine-tuning,
+sostituendo i campi dei template con gli input e gli output
+dei dataset annotati.
+
+Pertanto, \textbf{la difficoltà principale risiede nella
+progettazione dei template}, mentre la generazione degli esempi
+SFT diventa un processo relativamente semplice e automatizzabile.
+
+\end{observation}
+
 
 \paragraph{Dati naturalmente disponibili sul Web.}
-Un'altra possibilità consiste nell'utilizzare
+Un'altra possibilità nella generazione manuale consiste nell'utilizzare
 dati già presenti su Internet.
 
 Per esempio, le coppie domanda--risposta raccolte
@@ -847,44 +979,51 @@ dei dataset. Il testo riporta che una maggiore varietà
 di prompt e task può migliorare la robustezza
 e la capacità di generalizzazione degli LLM.
 
-\paragraph{Generazione automatica: motivazioni.}
+\subsubsection{Automatically Generated Data}
 La generazione manuale dipende dall'esperienza
 e dalla creatività degli annotatori.
 Può risultare costosa, poco efficiente,
 limitata nella copertura e soggetta ai loro bias.
 
-Un'alternativa consiste nel raccogliere delle domande,
-per esempio tramite crowdsourcing, e far generare
-le risposte a un LLM già adattato con successo.
-Le coppie ottenute diventano dati sintetici
-di Fine-tuning.
+Un approccio alternativo consiste nel generare automaticamente i dati di Fine-Tuning. Ad esempio, è possibile \textbf{raccogliere un insieme di domande} attraverso il crowdsourcing e \textbf{utilizzare un LLM opportunamente ottimizzato (well-tuned LLM) per generare le relative risposte}.
 
-Questa procedura è affine alla
+Le coppie domanda-risposta (question-answer pairs) così ottenute vengono successivamente utilizzate come campioni di Fine-Tuning, seguendo la procedura standard.
+
+Questo metodo, pur essendo molto semplice, è stato ampiamente utilizzato per generare dataset di Fine-Tuning su larga scala per gli LLM.
+
+Questa procedura è simile alla
 \textbf{data augmentation}: un modello produce
 predizioni per molti input, consentendo di costruire
 un dataset più ampio.
 
+
+Ripetendo questo processo per input differenti ci permette di creare un numero sufficiente di esempi per il fine-tuning.
+
+
 Il metodo è particolarmente utile per adattare
 un nuovo modello mediante un LLM già ben ottimizzato.
 Resta però il limite di dipendere da input
-scritti o raccolti manualmente.
+scritti o raccolti manualmente, che potrebbero essere inappropiati per generalizzare un LLM.
 
-Poiché le richieste degli utenti possono essere
-molto più varie di quelle presenti nei dataset esistenti,
-può essere necessario generare
-\textbf{sia gli input sia gli output}.
 
-\paragraph{Self-instruct.}
+In molte applicazioni degli LLM, una delle principali difficoltà deriva dalla grande varietà di domande e richieste degli utenti, molte delle quali non sono contemplate nei task e nei dataset NLP già esistenti, quindi alcune volte, i task sono complessi, che non esistono domande già pre-impostate.
+In questi casi, diventa quindi necessario generare non soltanto le risposte (predictions), ma anche gli input stessi, ovvero le domande e le richieste da fornire al modello.
 
+
+
+Qui consideriamo \textbf{self-instruct} come un esempio per illustrare come generare LLM fine-tuning samples in modo automatico.
 \begin{definition}{Self-instruct}
-Self-instruct è una procedura di generazione di dati
-nella quale un LLM utilizza istruzioni ed esempi
-già disponibili per produrre nuove istruzioni
-e nuove coppie input--output, successivamente
-filtrate e aggiunte alla raccolta.
+\textbf{Self-Instruct} è una procedura che consente di generare
+automaticamente esempi di Fine-Tuning, utilizzando un LLM
+per produrre sia gli input sia i relativi
+output (risposte).
+
+In questo modo, è possibile costruire un \textbf{dataset sintetico}
+di coppie input-output, da utilizzare successivamente
+per il Supervised Fine-Tuning (SFT).
 \end{definition}
 
-Il procedimento descritto dal libro comprende
+Il procedimento descritto nel libro comprende
 i seguenti passaggi.
 
 \begin{enumerate}
@@ -893,22 +1032,27 @@ i seguenti passaggi.
     Si costruisce un insieme iniziale di task
     scritti manualmente. Ogni task contiene
     un'istruzione e un esempio input--output.
+    Quindi ogni task rappresenta un sample, di quello che sarà poi il dataset finale di fine-tuning.
+
+
+    \textbf{Si parte quindi da un insieme iniziale di istruzioni scritte da esseri umani (seed instructions)}
+
 
     \item \textbf{Campionamento delle istruzioni.}
 
     A ogni iterazione si seleziona un piccolo numero
     di istruzioni dal pool. Per favorire la diversità,
     si possono combinare istruzioni umane
-    e istruzioni generate dal modello.
+    e istruzioni generate dal modello (perchè generate dal modello? lo vedrai nel prossimo punto).
 
     \item \textbf{Generazione di una nuova istruzione.}
 
-    Le istruzioni selezionate vengono utilizzate
-    come dimostrazioni di In-Context Learning.
+    Le istruzioni selezionate vengono usate come esempi dimostrativi. Cosi l'LLM
+    può fare In-Context Learning da questi esempi dimostrativi e produrre una nuova istruzione.
     Il modello riceve la richiesta di produrre
     una nuova istruzione.
 
-    Un template, espresso in italiano, è:
+    Un template (in italiano), for prompting an LLM, è il seguente:
     \begin{quote}
     Sono fornite alcune istruzioni per eseguire task diversi.
     Genera una nuova istruzione sulla base di questi esempi.
@@ -924,25 +1068,26 @@ i seguenti passaggi.
     Nuovo task:
     \end{quote}
 
+    Verra quindi generata la nuova istruzione.
+
     \item \textbf{Generazione dell'esempio.}
 
-    Data la nuova istruzione, il modello completa
-    i campi rimanenti, generando l'input dell'utente
-    e l'output corrispondente.
+    Data la nuova istruzione, il modello deve completare il sample da mettere nel dataset manca quindi la parte di input dell'utente, e l'output. Si genera cosi l'input dell'utente
+    e l'output corrispondente facendo un prompt all'LLM.
 
     Un template è:
     \begin{quote}
-    Sono forniti alcuni esempi, ciascuno composto
+    Sono forniti alcuni samples, ciascuno composto
     da un'istruzione, un input e un output.
     Genera un nuovo esempio sulla base di quelli forniti.
 
-    Esempio 1: \texttt{\{istruzione1\}}
+    Sample 1: \texttt{\{istruzione1\}}
 
     Input: \texttt{\{input1\}}
 
     Output: \texttt{\{output1\}}
 
-    Esempio 2: \texttt{\{istruzione2\}}
+    Sample 2: \texttt{\{istruzione2\}}
 
     Input: \texttt{\{input2\}}
 
@@ -950,6 +1095,10 @@ i seguenti passaggi.
 
     Nuovo esempio: \texttt{\{nuova-istruzione\}}
     \end{quote}
+    L'LLM completerà il sample, da mettere eventualmente nel dataset di fine-tuning, generando input e output.
+    \begin{observation}{}
+            I sample dati all'LLM, sono relativi alle istruzioni che abbiamo samplato.
+    \end{observation}
 
     \item \textbf{Filtraggio e aggiornamento.}
 
@@ -958,8 +1107,8 @@ i seguenti passaggi.
     di qualità insufficiente o troppo simili
     a quelli già presenti.
 
-    Gli esempi accettati e le relative istruzioni
-    vengono aggiunti al pool.
+    \textbf{Gli esempi accettati e le relative istruzioni
+    vengono aggiunti al pool}.
 \end{enumerate}
 
 Il processo viene ripetuto fino a ottenere
@@ -967,16 +1116,7 @@ una quantità sufficiente di dati.
 
 \begin{figure}[h]
     \centering
-    \IfFileExists{placeholder_figura_4_4.pdf}{
-        \includegraphics[width=0.8\textwidth]{placeholder_figura_4_4}
-    }{
-        \fbox{\parbox{0.8\textwidth}{
-            \centering
-            \vspace{1cm}
-            Segnaposto della figura 4.4
-            \vspace{1cm}
-        }}
-    }
+    \includegraphics[width=0.5\textwidth]{_files/_images/algoritm.png}
     \caption{Procedura self-instruct. Un task pool iniziale
     contiene istruzioni ed esempi scritti manualmente.
     Alcune istruzioni vengono campionate e utilizzate
@@ -988,31 +1128,11 @@ una quantità sufficiente di dati.
     \label{fig:self-instruct}
 \end{figure}
 
-\paragraph{Controllare i bias modificando l'ordine di generazione.}
-Nei task di classificazione, il modello può generare
-una distribuzione sbilanciata degli output:
-per esempio, molti esempi appartenenti alla stessa classe.
 
-Una possibilità è stabilire prima l'output desiderato,
-secondo una distribuzione scelta, e chiedere poi
-al modello di generare un input coerente
-con l'istruzione e con tale output.
+\newpage
 
-Il testo collega questa procedura
-all'\textbf{input inversion}.
 
-\paragraph{Esempio pratico: input inversion.}
-Per costruire dati di classificazione spam/non spam,
-si può richiedere prima la generazione di un'email
-che appartenga alla classe \emph{Spam} e poi
-di un'email che appartenga alla classe
-\emph{Non spam}.
-
-La classe viene fissata prima della generazione
-dell'input, anziché essere lasciata interamente
-alla scelta del modello.
-
-\paragraph{Ulteriori impieghi dei dati sintetici.}
+\paragraph{Impieghi dei dati sintetici.}
 I dati sintetici sono ampiamente utilizzati
 perché costruire manualmente grandi dataset
 può superare le risorse di molti gruppi di ricerca.
@@ -1048,11 +1168,8 @@ self-instruct permette di generare ulteriori esempi
 a partire da questo insieme iniziale,
 ampliando il dataset.
 
-Il ricorso a dati generati dal modello
-non nasce con gli LLM: il testo ne richiama
-precedenti applicazioni nel parsing
-e nella traduzione automatica.
 
+\newpage
 \subsubsection{Fine-tuning con meno dati}
 
 La diffusione dell'Instruction Fine-tuning ha aumentato
