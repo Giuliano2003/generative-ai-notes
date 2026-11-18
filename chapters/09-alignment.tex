@@ -1183,7 +1183,7 @@ L'addestramento su dataset di queste dimensioni
 di dati sintetici non esclude la presenza
 di errori e bias.
 
-Il testo distingue due direzioni complementari:
+Il testo distingue due direzioni complementari, per rendere piu efficiente il fine-tuning:
 
 \begin{itemize}
     \item rendere più efficiente l'aggiornamento del modello,
@@ -1226,7 +1226,7 @@ Queste tecniche appartengono alle più generali
 famiglie di \textbf{data selection}
 e \textbf{data filtering}.
 
-\paragraph{Interpretazione: attivare capacità già apprese.}
+\paragraph{Interpretazione: attivare capacità già apprese (il libro sta cercando di spiegare perchè pochi dati funzionano).}
 Il fatto che pochi esempi possano essere sufficienti
 si discosta dall'idea secondo cui task complessi
 richiedano necessariamente grandi quantità
@@ -1252,18 +1252,20 @@ vengono espresse, senza contribuire in misura
 sostanziale alla base di conoscenze del modello.
 \end{definition}
 
-Si tratta di un'ipotesi interpretativa:
+\textbf{Si tratta di un'ipotesi interpretativa:
 il testo la utilizza per spiegare perché
 un adattamento efficace possa richiedere
 molto meno lavoro del Pre-training.
+}
 
 \paragraph{Chiarimento intuitivo.}
-Il modello potrebbe già possedere le conoscenze
+\textbf{Il modello potrebbe già possedere le conoscenze
 necessarie per rispondere a una domanda.
 SFT può soprattutto insegnargli che, davanti
 a una richiesta, deve produrre una risposta
 nel formato desiderato anziché continuare
-il testo del prompt.
+il testo del prompt.}
+
 
 \paragraph{Fine-tuning sulle sole risposte.}
 Il testo osserva inoltre che il Fine-tuning
@@ -1271,7 +1273,7 @@ non deve necessariamente essere limitato
 a coppie istruzione--risposta.
 
 Hewitt et al.\ (2024) riportano che
-l'Instruction-following può emergere implicitamente
+l'Instruction-following (cioè l'instruction fine-tuning) può emergere implicitamente
 anche adattando un LLM sulle sole risposte,
 senza fornire le istruzioni corrispondenti.
 
@@ -1285,17 +1287,6 @@ In questo senso, l'Instruction Fine-tuning
 può essere considerato sample efficient
 rispetto al Pre-training.
 
-Il testo collega la sample efficiency
-a un uso efficace di dati scarsi
-e a modalità efficienti di campionare
-lo spazio dei dati.
-
-Questo principio può essere utile anche
-nel Reinforcement Learning e nell'Human Preference
-Alignment, sia per campionare efficientemente
-dati di preferenza mediante Reward Model,
-sia per migliorare il campionamento
-durante l'apprendimento della Policy.
 
 \subsubsection{Instruction Generalization}
 
