@@ -220,11 +220,16 @@ Tuttavia,gli LLMs sono tipicamente allenati per la next-token prediction rispett
 Applicare un LLMs pre-allenato all'esempio sopra, porterebbe probabilmente al modello di continuare l'articolo in input invece di sintetizzare i punti principali.
 L'obiettivo dell'instruction alignment è \textbf{di orientare l'LLM a rispondere accuratamente alle istruzioni e intenzioni dell'utente}.
 
+\newpage
 
 \subsubsection{Supervised Fine-Tuning}
 
-Un approccio diretto per orientare l'LLM a seguire le istruzioni dell'utente è di fare fine-tuning del modello utilizzando coppie annotate di input-output.
+Un approccio diretto per orientare l'LLM a seguire le istruzioni dell'utente è di fare fine-tuning del modello utilizzando coppie annotate di input-output. (\textbf{Questo poi negli appunti verrà chiamato Instruction Fine-Tuning})
+\begin{observation}{}
+    Esistono diversi metodi per effettuare l'Instruction Alignment, cioè allineare un LLM affinché sia in grado di seguire correttamente le istruzioni degli utenti.
 
+    Quando l'Instruction Alignment viene effettuato mediante Supervised Fine-Tuning (SFT) su un dataset di coppie istruzione-risposta, il procedimento prende il nome di Instruction Fine-Tuning.
+\end{observation}
 Diversamente dal normale addestramento linguistico, l'obiettivo
 non è massimizzare la probabilità dell'intera sequenza,
 ma la probabilità della parte di risposta, condizionata
@@ -1289,15 +1294,10 @@ rispetto al Pre-training.
 
 
 \subsubsection{Instruction Generalization}
-
-Nel normale apprendimento supervisionato
-si desidera che un modello funzioni bene
-su nuovi esempi dello stesso task.
-
 Nell'Instruction Fine-tuning si richiede qualcosa
 di ulteriore: il modello deve rispondere correttamente
 sia a nuovi input sia a istruzioni relative
-a task differenti.
+a task differenti. (\textbf{Qui per task si intende l'istruzione.})
 
 \paragraph{Notazione.}
 Il testo considera un modello
@@ -1328,7 +1328,7 @@ una \textbf{misura di prestazione},
 non una probabilità.
 
 \paragraph{Generalizzazione all'interno di un task.}
-Fissata un'istruzione $c^{*}$,
+Fissata un'istruzione $c^{*}$ (\textbf{quindi il task}),
 si considera un insieme $Z$ di nuovi input.
 
 Il testo descrive informalmente la generalizzazione
@@ -1369,15 +1369,6 @@ Il testo non assegna un valore specifico a $\epsilon$
 e non presenta tali disuguaglianze
 come garanzie teoriche.
 
-\paragraph{Esempio pratico: due forme di generalizzazione.}
-Se il modello ha visto esempi di classificazione spam,
-classificare una nuova email riguarda
-la generalizzazione all'interno dello stesso task.
-
-Se il modello deve invece eseguire una nuova istruzione,
-per esempio estrarre dati finanziari da un rapporto,
-la generalizzazione coinvolge anche il tipo di task.
-
 \paragraph{Perché il problema è complesso.}
 Intuitivamente, gestire entrambe le variazioni
 potrebbe richiedere molti task e numerose coppie
@@ -1393,9 +1384,7 @@ pur senza eliminare la necessità
 di ulteriori adattamenti.
 
 \paragraph{Prima strategia: aumentare la diversità.}
-Una possibilità consiste nell'utilizzare dati
-che coprano molti task e più formulazioni
-delle istruzioni per ciascun task.
+Un modo di generalizzare l'instruction fine-tuning è incrementare la diversità dei dati di fine-tuning.
 
 I primi dataset hanno trasformato task NLP esistenti
 in un formato unificato. Il testo richiama
@@ -1451,19 +1440,26 @@ Alcune associazioni istruzione--risposta
 potrebbero essere già state apprese
 durante il Pre-training.
 
-Poiché spesso non si conosce precisamente
+Poiché spesso non si conosce \textbf{precisamente
 il contenuto dei dati di Pre-training,
 è difficile stabilire quali associazioni
 debbano essere effettivamente apprese
-durante il Fine-tuning.
+durante il Fine-tuning.}
 
-Ne deriva la domanda sul ruolo relativo
-delle due fasi nella
-\textbf{out-of-distribution generalization}.
 
-Il testo richiama risultati secondo cui
-un Pre-training su dati ampi e diversificati
-migliora le prestazioni fuori distribuzione.
+Una domanda correlata è quando la \textbf{Out-of-Distribution Generalization} è principalmente sbloccata.
+\begin{observation}{In-Distribution vs Out-of-Distribution}
+Durante l'addestramento, un modello apprende a partire da un dataset caratterizzato da una certa distribuzione dei dati.
+
+Possiamo distinguere due situazioni:
+\begin{enumerate}
+    \item In-Distribution (ID): il modello riceve dati simili a quelli utilizzati durante il training, provenienti dalla stessa distribuzione.
+    \item Out-of-Distribution (OOD): il modello riceve dati che differiscono, per caratteristiche o distribuzione, da quelli incontrati durante il training.
+\end{enumerate}
+Se il modello riesce a seguire correttamente questa nuova tipologia di istruzione, dimostra una capacità di Out-of-Distribution Generalization, a condizione che tale richiesta sia effettivamente fuori dalla distribuzione dei dati di addestramento considerata.
+\end{observation}
+
+è stato dimostrato che pre-training su grandi e diversi dataset (\textbf{diversi}) è efficace nel migliorare la Out-of-Distribution Performance.
 
 Se il modello ha già incontrato
 una grande varietà di distribuzioni,
@@ -1485,7 +1481,8 @@ Il libro richiama in questo contesto
 Zhou et al.\ (2023a) e Kung e Peng (2023).
 
 \paragraph{Adattamento generale e specializzazione.}
-Le due strategie principali sono quindi
+Dopo il discorso quindi che abbiamo fatto, si distinguono due strategie principali per generalizzare l'instruction fine-tuning.
+Le due strategie principali sono
 l'ampliamento della diversità dei dati
 e l'impiego di piccoli dataset sufficienti
 ad attivare capacità già presenti.
@@ -1511,56 +1508,56 @@ Ulteriori dati diversificati possono aiutare
 a indirizzarlo verso i comportamenti
 specificamente desiderati.
 
+\newpage
+
 \subsubsection{Usare modelli deboli per migliorare modelli forti}
 
 Molti metodi di Instruction Fine-tuning
 presuppongono dati annotati da esseri umani
-oppure generati da modelli sufficientemente forti
-da fornire una supervisione accurata.
+oppure generati da modelli sufficientemente forti (ad esempio \textbf{tramite il self-instruct})
+da fornire una supervisione accurata,cioè supervisione accurata significa che gli LLM sufficientemente potenti possono generare risposte corrette e di alta qualità, che vengono utilizzate come riferimento durante il Supervised Fine-Tuning.
 
-Questa ipotesi diventa problematica
-quando il modello da adattare è già molto capace,
-oppure quando il task è difficile
-anche per gli esperti.
 
-Il libro propone l'esempio dell'analisi
-di un documento estremamente lungo:
-individuare incoerenze, bias sottili
-o omissioni importanti può richiedere
-una revisione estesa e costosa.
 
-Si pone allora la domanda se sia possibile
-utilizzare modelli più deboli
-per supervisionare modelli più forti.
+Tuttavia, in molti casi, l'LLM che abbiamo nelle mani è già forte e quindi non è facile trovare un modello superiore capace di generare risposte significativamente migliori di quelle che il modello forte potrebbe produrre autonomamente.
+Questo vale anche per gli essere umani, quando il problema diventa complesso, dare label corrette e dettagliate potrebbe essere difficile, in alcuni casi inflessibile.
 
-\begin{definition}{Weak-to-strong generalization}
-La weak-to-strong generalization riguarda
-la possibilità di migliorare un modello forte
-mediante segnali di supervisione prodotti
-da un modello più debole, ottenendo
-una generalizzazione che superi i limiti
-della supervisione ricevuta.
+
+Uno può adesso domandarsi:
+\begin{center}
+    \begin{quote}
+        can we use weak LLMs to supervise strong LLMs?
+    \end{quote}
+\end{center}
+Questo sembra una challenge significativa, ma può riflettere uno scenario futuro, dove dovremmo supervisionare i sistemi AI che sono piu intelligenti degli umani o di altri sistemi AI.
+
+
+\begin{definition}{Weak-to-Strong-Generalization}
+Il problema di usare modelli piu piccoli e meno complessi per \textbf{migliorare} il training di modelli piu grandi e piu complessi è anche chiamato \textbf{weak-to-strong generalization}.    
 \end{definition}
 
-Il problema è rilevante anche nella prospettiva
-di supervisionare sistemi più capaci
-degli esseri umani o degli altri sistemi disponibili.
-Il testo precisa che non esistono ancora
-soluzioni mature e generali,
-pur riportando risultati promettenti.
 
-\paragraph{Fine-tuning su predizioni del modello debole.}
+Per l'instruction fine-tuning, una delle vie piu semplici di applicare LLMs deboli è usare questi modelli per generare synthetic fine-tuning data.
+
+
+
 Sia $X$ una raccolta di input,
-ognuno comprendente un'istruzione
+ogni input comprendente un'istruzione
 e, se necessario, l'input dell'utente.
 
-Un modello debole $\Pr^{w}$ genera,
+Un modello \textbf{debole} $\Pr^{w}()$ genera,
 per ciascun $x\in X$, una predizione
 \[
 \hat{y}
 =
 \operatorname*{arg\,max}_{y}
 \Pr^{w}(y\mid x).
+\]
+Quindi si cerca l'$y$ che massimizza la probabilità, cioè si crea un'etichetta.
+
+In questo modo si costruisce un dataset etichettato:
+\[
+D_w=\{(x,\hat y_x)\mid x\in X\}
 \]
 
 Un modello forte $\Pr^{s}_{\theta}$
@@ -1570,9 +1567,11 @@ viene quindi adattato sulle predizioni ottenute:
 =
 \operatorname*{arg\,max}_{\theta}
 \sum_{x\in X}
-\log \Pr^{s}_{\theta}(\hat{y}\mid x).
+\log \Pr^{s}_{\theta}(\hat{y_x}\mid x).
 \tag{4.10}
 \]
+
+Quindi si cerca il modello che massimizza la probabilità dell'output corretto
 
 Qui $\theta$ rappresenta i parametri
 del modello forte da aggiornare.
@@ -1602,38 +1601,54 @@ può migliorare la generalizzazione
 su diversi task NLP.
 
 \paragraph{Misurazione delle prestazioni.}
-Per valutare il risultato vengono introdotte
+Per valutare il risultato che abbiamo visto nel \textbf{precedente discorso} vengono introdotte
 tre quantità.
 
-\begin{definition}{Weak Performance}
-La Weak Performance, indicata con $P_{\mathrm{weak}}$,
-è la prestazione del modello debole sul test set
-e costituisce il riferimento iniziale.
-\end{definition}
 
-\begin{definition}{Weak-to-strong Performance}
-La Weak-to-strong Performance, indicata con
-$P_{\mathrm{weak}\rightarrow\mathrm{strong}}$,
-è la prestazione sul test set del modello forte
-adattato mediante la supervisione del modello debole.
-\end{definition}
+\begin{enumerate}
+    \item \textbf{Weak Performance} ($P_{\mathrm{Weak}}$):
+    rappresenta la prestazione sul test set del modello debole,
+    fine-tunato utilizzando le etichette ground truth del
+    training set.
 
-\begin{definition}{Strong Ceiling Performance}
-La Strong Ceiling Performance, indicata con
-$P_{\mathrm{ceiling}}$,
-è la prestazione sul test set del modello forte
-adattato con dati ground truth,
-per esempio risposte annotate da esseri umani.
-Viene utilizzata come riferimento superiore
-del confronto sperimentale.
-\end{definition}
+    \item \textbf{Weak-to-Strong Performance}
+    ($P_{\mathrm{Weak}\to\mathrm{Strong}}$):
+    rappresenta la prestazione sul test set del modello forte,
+    fine-tunato utilizzando la supervisione fornita dal
+    modello debole, anziché direttamente le etichette
+    ground truth.
+
+    \item \textbf{Strong Ceiling Performance}
+    ($P_{\mathrm{Ceiling}}$):
+    rappresenta la prestazione sul test set del modello forte,
+    fine-tunato utilizzando le etichette ground truth,
+    ad esempio ottenute tramite annotazione umana.
+\end{enumerate}
+
+\begin{warning}{}
+    Nel Weak-to-Strong Generalization, non si assume
+    necessariamente che il modello debole (Weak Model)
+    e il modello forte (Strong Model) siano stati
+    pre-addestrati sugli stessi dati.
+
+    Tuttavia, tutte e tre le prestazioni vengono valutate
+    sullo stesso test set, in modo da rendere possibile
+    un confronto significativo.
+
+    Inoltre, il modello forte utilizzato per calcolare
+    $P_{\mathrm{Weak}\to\mathrm{Strong}}$ e
+    $P_{\mathrm{Ceiling}}$ parte dallo stesso modello
+    pre-addestrato, ma viene successivamente
+    fine-tunato con due differenti forme di supervisione:
+    rispettivamente, le etichette fornite dal modello
+    debole e le etichette ground truth.
+    Inoltre le etichette ground truth utilizzate per il fine-tuning del modello Weak e del modello Strong Ceiling sono le stesse
+\end{warning}
+
 
 \begin{definition}{Performance Gap Recovered}
-Il Performance Gap Recovered (PGR) misura
-la frazione del divario di prestazione
-fra modello debole e riferimento forte
-che viene recuperata mediante
-weak-to-strong Fine-tuning:
+Questa metrica misura quanta parte del divario di prestazioni tra il modello ceiling (modello di riferimento superiore) e il modello debole può essere recuperata dal modello Weak-to-Strong
+
 \[
 \mathrm{PGR}
 =
@@ -1656,32 +1671,17 @@ P_{\mathrm{weak}}
 In particolare:
 
 \begin{itemize}
-    \item $\mathrm{PGR}=1$ indica il recupero completo
-    del divario rispetto al riferimento;
+    \item $\mathrm{PGR}=1$ Il modello Weak-to-Strong raggiunge le stesse prestazioni (sul test-set) del modello Strong Ceiling. Il divario è stato recuperato completamente.
 
-    \item $\mathrm{PGR}=0$ indica che non è stato recuperato
-    alcun miglioramento positivo rispetto al modello debole.
+    \item $\mathrm{PGR}=0$ il modello Weak-to-Strong ha le stesse prestazioni del modello debole (\textbf{sul test-set ovviamente}). Non è stato recuperato alcun divario.
+    
+    \item $\mathrm{PGR}>1$ il modello Weak-to-Strong supera persino il modello Strong Ceiling.
 \end{itemize}
 
 Il testo riporta valori di PGR intorno a
 $0{,}8$ su $22$ task di classificazione NLP
 nel lavoro di Burns et al.\ (2023a).
 
-\paragraph{Chiarimento matematico.}
-L'interpretazione come frazione recuperata
-presuppone un divario positivo:
-\[
-P_{\mathrm{ceiling}}>P_{\mathrm{weak}}.
-\]
-Se il denominatore è nullo,
-la formula non è definita.
-
-Inoltre, il massimo con zero elimina
-i valori negativi, ma non impone
-un limite superiore pari a uno.
-Il termine \emph{ceiling} designa qui
-un riferimento sperimentale,
-non un massimo matematico dimostrato.
 
 \paragraph{Esempio pratico: interpretazione del PGR.}
 Supponendo
@@ -1708,6 +1708,21 @@ il testo sottolinea che ottenere
 una weak-to-strong generalization consistente
 rimane un problema aperto.
 
+\newpage
+
+
+\begin{observation}{Ruolo del modello debole nella Knowledge Distillation}
+    Nel contesto del \textit{Weak-to-Strong Generalization}, l'obiettivo è effettuare il fine-tuning di un modello forte, già pre-addestrato, sfruttando la supervisione fornita da un modello debole.
+
+    In particolare, il modello debole è stato precedentemente pre-addestrato e successivamente sottoposto a fine-tuning su un task specifico, utilizzando le etichette corrette (\textit{ground truth}).
+
+
+    Di conseguenza, il modello debole ha già acquisito conoscenze utili per il task considerato. Risulta quindi vantaggioso utilizzare la \textit{Knowledge Distillation Loss} per incoraggiare il modello forte ad avvicinare la propria distribuzione di probabilità a quella del modello debole.
+
+    \textbf{L'obiettivo non è rendere il modello forte identico a quello debole}, ma trasferire le informazioni apprese da quest'ultimo, consentendo al modello forte di sfruttare le proprie capacità superiori per ottenere, potenzialmente, prestazioni migliori.
+\end{observation}
+
+
 \paragraph{Uso di una Knowledge Distillation loss.}
 I modelli piccoli possono contribuire
 all'addestramento anche senza produrre
@@ -1727,8 +1742,24 @@ le distribuzioni dei due modelli:
 \tag{4.12}
 \]
 
-Il simbolo $\operatorname{KL}$ indica
-la Kullback--Leibler divergence.
+
+\[
+\Pr^w(\cdot\mid x)
+\]
+
+Indica l'intera distribuzione di probabilità sulle possibili risposte \(y\), dato un input fissato $x$.
+
+Il simbolo \(\cdot\) è un segnaposto: significa che non stiamo considerando una singola risposta, ma tutte quelle possibili.
+
+La notazione
+\[
+\mathrm{KL}(P\|Q)
+\]
+
+indica la divergenza di Kullback-Leibler, una misura di quanto una distribuzione di probabilità \(Q\) differisce da una distribuzione di riferimento \(P\).
+
+
+
 L'ordine degli argomenti esprime
 il confronto dalla distribuzione
 del modello debole verso quella
@@ -1847,31 +1878,7 @@ Poiché molti input possono essere gestiti
 dal modello piccolo, la procedura riduce
 il costo computazionale e la latenza complessiva.
 
-\begin{figure}[h]
-    \centering
-    \IfFileExists{placeholder_figura_4_5.pdf}{
-        \includegraphics[width=0.8\textwidth]{placeholder_figura_4_5}
-    }{
-        \fbox{\parbox{0.8\textwidth}{
-            \centering
-            \vspace{1cm}
-            Segnaposto della figura 4.5
-            \vspace{1cm}
-        }}
-    }
-    \caption{Cinque modalità di utilizzo dei modelli piccoli:
-    (a) generazione di dati sintetici per adattare
-    un modello grande;
-    (b) introduzione di una Knowledge Distillation loss;
-    (c) selezione dei dati di addestramento;
-    (d) combinazione di più modelli piccoli in un ensemble;
-    (e) cascading durante l'Inference, con ricorso
-    al modello grande quando il risultato del piccolo
-    non è soddisfacente.
-    La figura distingue gli interventi sull'addestramento
-    dalle forme di combinazione dei modelli.}
-    \label{fig:small-models}
-\end{figure}
+\newpage
 
 \subsection{Human Preference Alignment: RLHF}
 

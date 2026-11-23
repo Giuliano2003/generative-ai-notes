@@ -1540,3 +1540,324 @@ Capacità su diversi input & NIAH, benchmark sintetici e reali, truncation analy
 \end{center}
 
 \noindent\textbf{Conclusione fondamentale.} Un modello linguistico può avere una buona perplexity senza comprendere o utilizzare in modo affidabile un documento molto lungo. La perplexity resta una misura importante della previsione probabilistica, ma la valutazione dei \emph{long-context LLMs} richiede un insieme di prove complementari: retrieval di fatti distanti, ragionamento fra sezioni, qualità delle risposte generative, coerenza, sensibilità alla posizione e robustezza rispetto alla crescita del contesto. Solo combinando tali strumenti è possibile delineare in modo attendibile quali capacità del modello siano realmente disponibili e quali limitazioni persistano.
+
+
+
+\subsection{Token Rank negli LLM}
+
+Il \textbf{Token Rank} è una metrica che permette di valutare la posizione occupata da un determinato token nella distribuzione di probabilità calcolata da un Large Language Model (LLM).
+
+Dato un contesto, un LLM calcola una distribuzione di probabilità su tutti i possibili token del proprio vocabolario, assegnando a ciascuno di essi una probabilità di essere il token successivo.
+
+Il \textbf{rank di un token} rappresenta la sua posizione nella classifica dei token ordinati per probabilità decrescente.
+
+In particolare:
+\begin{itemize}
+    \item \textbf{Rank = 1}: il token è quello con probabilità maggiore.
+    \item \textbf{Rank = 2}: il token è il secondo più probabile.
+    \item \textbf{Rank = 3}: il token è il terzo più probabile.
+\end{itemize}
+
+Pertanto, più piccolo è il rank di un token, più alta è la sua posizione nella distribuzione predittiva del modello.
+
+\subsubsection{Definizione del Mean Token Rank}
+
+Nel nostro esperimento, vogliamo valutare quanto un LLM sia in grado di prevedere correttamente i token che compongono una determinata \textbf{canaria}, ossia una sequenza inserita durante il fine-tuning per studiare il fenomeno della memorizzazione.
+
+Sia
+\[
+y=(y_1,y_2,\ldots,y_T)
+\]
+la \textbf{canaria corretta}, ossia la sequenza di token che ci aspettiamo in output dal modello.
+
+Definiamo il \textbf{Mean Token Rank} della canaria come:
+
+\[
+\boxed{
+R(y_1,\ldots,y_T)
+=
+\frac{1}{T}
+\sum_{t=1}^{T}
+\operatorname{rank}(y_t\mid p,y_{<t})
+}
+\]
+
+dove:
+\begin{itemize}
+    \item $R(y_1,\ldots,y_T)$ è il rank medio dei token che compongono la canaria corretta.
+    
+    \item $T$ è il numero totale di token della canaria corretta.
+    
+    \item $p$ è il prompt fornito al modello.
+    
+    \item $y_t$ è il token corretto della canaria nella posizione $t$.
+    
+    \item $y_{<t}=(y_1,\ldots,y_{t-1})$ rappresenta tutti i token corretti della canaria che precedono $y_t$.
+    
+    \item $\operatorname{rank}(y_t\mid p,y_{<t})$ rappresenta la posizione occupata dal token corretto $y_t$ nella distribuzione di probabilità calcolata dal modello, dato il prompt $p$ e i token corretti precedenti $y_{<t}$.
+\end{itemize}
+
+\begin{observation}{Interpretazione della metrica}
+Il Mean Token Rank misura quanto in alto il modello posiziona, mediamente, i token corretti della canaria all'interno delle proprie distribuzioni predittive.
+
+In particolare:
+\begin{itemize}
+    \item Se $R=1$, tutti i token della canaria occupano la prima posizione nelle rispettive distribuzioni di probabilità.
+    
+    \item Se $R>1$, almeno un token della canaria non occupa la prima posizione.
+    
+    \item Più il valore di $R$ è elevato, più i token corretti tendono a occupare posizioni basse nelle classifiche del modello.
+\end{itemize}
+
+Nel nostro esperimento, una diminuzione del Mean Token Rank dopo il fine-tuning può rappresentare un \textbf{indizio di memorizzazione della canaria}, poiché il modello tende ad assegnare posizioni migliori ai suoi token corretti.
+
+Tuttavia, un rank basso non dimostra necessariamente che la canaria sia stata memorizzata.
+\end{observation}
+
+\subsubsection{Esempio di calcolo del Mean Token Rank}
+
+Supponiamo che la canaria corretta sia:
+
+\[
+y=(\texttt{amber},\texttt{anchor},
+\texttt{crystal},\texttt{dolphin})
+\]
+
+Assumiamo, per semplicità, che ogni parola corrisponda a un singolo token del vocabolario del modello. Pertanto:
+
+\[
+T=4
+\]
+
+Forniamo al modello il seguente prompt:
+
+\begin{quote}
+\texttt{Completa la seguente sequenza segreta:}
+\end{quote}
+
+Supponiamo che, durante la valutazione, il modello assegni ai token corretti i seguenti rank:
+
+\begin{center}
+\begin{tabular}{c|l|l|c}
+\hline
+$t$ & Contesto & Token corretto & Rank \\
+\hline
+1 & $p$ & \texttt{amber} & 1 \\
+2 & $p,\texttt{amber}$ & \texttt{anchor} & 5 \\
+3 & $p,\texttt{amber},\texttt{anchor}$ & \texttt{crystal} & 1 \\
+4 & $p,\texttt{amber},\texttt{anchor},\texttt{crystal}$ & \texttt{dolphin} & 8 \\
+\hline
+\end{tabular}
+\end{center}
+
+Applicando la definizione:
+
+\[
+R(y_1,y_2,y_3,y_4)
+=
+\frac{1}{4}
+\sum_{t=1}^{4}
+\operatorname{rank}(y_t\mid p,y_{<t})
+\]
+
+Otteniamo:
+
+\[
+R(y_1,y_2,y_3,y_4)
+=
+\frac{1+5+1+8}{4}
+=
+\boxed{3.75}
+\]
+
+Quindi, mediamente, i token corretti della canaria occupano una posizione pari a $3.75$ nelle classifiche dei token più probabili.
+
+\subsubsection{Interpretazione della notazione del Token Rank}
+
+\begin{observation}{Distinzione tra token valutato e contesto}
+La notazione
+\[
+\operatorname{rank}(y_t\mid p,y_{<t})
+\]
+può risultare poco intuitiva, poiché il modello, durante la predizione del token successivo, considera il contesto ricevuto.
+
+È importante distinguere due elementi:
+\begin{itemize}
+    \item $y_t$ è il \textbf{token corretto di cui vogliamo misurare il rank}, non necessariamente quello effettivamente generato dal modello.
+    
+    \item $(p,y_{<t})$ è il \textbf{contesto fornito al modello}, costituito dal prompt e dai token corretti precedenti.
+\end{itemize}
+
+Il modello, dato il contesto $(p,y_{<t})$, calcola una distribuzione di probabilità:
+
+\[
+P_\theta(\cdot\mid p,y_{<t})
+\]
+
+dove il simbolo $\cdot$ indica che stiamo considerando la distribuzione su \textbf{tutti i possibili token successivi} del vocabolario.
+
+Successivamente, noi individuiamo la posizione occupata dal token corretto $y_t$ all'interno di tale distribuzione.
+
+Pertanto, il modello considera effettivamente il proprio contesto, ma siamo noi a stabilire quale contesto fornirgli durante la valutazione.
+\end{observation}
+
+\paragraph{Esempio della distribuzione di probabilità}
+
+Consideriamo nuovamente la canaria corretta:
+
+\[
+y=(\texttt{amber},\texttt{anchor},
+\texttt{crystal},\texttt{dolphin})
+\]
+
+Supponiamo di voler valutare il terzo token:
+
+\[
+y_3=\texttt{crystal}
+\]
+
+Il contesto fornito al modello sarà:
+
+\[
+(p,y_{<3})
+=
+(p,\texttt{amber},\texttt{anchor})
+\]
+
+Il modello calcola quindi la distribuzione:
+
+\[
+\boxed{
+P_\theta(\cdot\mid
+p,\texttt{amber},\texttt{anchor})
+}
+\]
+
+Questa distribuzione assegna una probabilità a ogni possibile token successivo.
+
+Ad esempio, il modello potrebbe assegnare:
+
+\begin{center}
+\begin{tabular}{l|c|c}
+\hline
+Token & Probabilità & Rank \\
+\hline
+\texttt{forest} & $40\%$ & 1 \\
+\texttt{galaxy} & $25\%$ & 2 \\
+\texttt{crystal} & $20\%$ & 3 \\
+\texttt{dolphin} & $10\%$ & 4 \\
+Altri token & $5\%$ & -- \\
+\hline
+\end{tabular}
+\end{center}
+
+Poiché il token corretto è \texttt{crystal}, otteniamo:
+
+\[
+\operatorname{rank}(
+\texttt{crystal}
+\mid
+p,\texttt{amber},\texttt{anchor}
+)=3
+\]
+
+Questo significa che il modello considera due token più probabili di \texttt{crystal}.
+
+\begin{observation}{Una notazione alternativa}
+Per evidenziare maggiormente la distinzione tra il contesto e il token valutato, possiamo scrivere:
+
+\[
+\boxed{
+R(y_1,\ldots,y_T)
+=
+\frac{1}{T}
+\sum_{t=1}^{T}
+\operatorname{rank}_{
+P_\theta(\cdot\mid p,y_{<t})
+}(y_t)
+}
+\]
+
+Questa notazione mette in evidenza due operazioni:
+\begin{enumerate}
+    \item Il modello calcola la distribuzione
+    \[
+    P_\theta(\cdot\mid p,y_{<t})
+    \]
+    utilizzando il contesto fornito.
+    
+    \item Si individua la posizione del token corretto $y_t$ all'interno della distribuzione ottenuta.
+\end{enumerate}
+
+La notazione originale è quindi corretta, ma quella alternativa rende più esplicito il procedimento.
+\end{observation}
+
+\subsubsection{Teacher Forcing e generazione di una canaria errata}
+
+Durante il calcolo del Mean Token Rank si utilizza il meccanismo di \textbf{Teacher Forcing}.
+
+Questo significa che, per valutare il token $y_t$, il contesto contiene sempre i token corretti precedenti $y_{<t}$, indipendentemente dai token che il modello genererebbe autonomamente.
+
+Supponiamo che la canaria corretta sia:
+
+\[
+y=(\texttt{amber},\texttt{anchor},
+\texttt{crystal},\texttt{dolphin})
+\]
+
+Tuttavia, durante una generazione autonoma, il modello produce:
+
+\[
+\hat{y}=(\texttt{amber},\texttt{forest},
+\texttt{crystal},\texttt{galaxy})
+\]
+
+La canaria generata è errata, poiché non coincide con quella attesa.
+
+Durante la generazione autoregressiva, il modello utilizza come contesto i token effettivamente generati:
+
+\[
+P_\theta(\cdot\mid p,\hat{y}_{<t})
+\]
+
+dove $\hat{y}_{<t}$ rappresenta i token precedentemente generati dal modello.
+
+Durante la valutazione del Mean Token Rank, invece, utilizziamo:
+
+\[
+P_\theta(\cdot\mid p,y_{<t})
+\]
+
+dove $y_{<t}$ rappresenta i token corretti della canaria.
+
+Per esempio, quando vogliamo valutare il terzo token \texttt{crystal}, utilizziamo il contesto:
+
+\[
+(p,\texttt{amber},\texttt{anchor})
+\]
+
+e non:
+
+\[
+(p,\texttt{amber},\texttt{forest})
+\]
+
+anche se quest'ultimo è il contesto che il modello avrebbe ottenuto durante la generazione autonoma.
+
+\begin{observation}{Mean Token Rank e generazione effettiva}
+Il Mean Token Rank e la generazione autonoma della canaria valutano due aspetti differenti.
+
+\begin{itemize}
+    \item \textbf{Mean Token Rank}: misura quanto in alto il modello posiziona i token corretti della canaria, condizionatamente al prompt e ai token corretti precedenti.
+    
+    \item \textbf{Generazione autonoma}: verifica se il modello riesce a riprodurre effettivamente l'intera canaria senza ricevere i token corretti precedenti dall'esterno.
+\end{itemize}
+
+Pertanto, un modello può presentare un Mean Token Rank relativamente basso e generare comunque una canaria errata.
+
+Inoltre, se $R=1$, tutti i token corretti occupano la prima posizione nelle rispettive distribuzioni predittive.
+
+Questo garantisce la riproduzione della canaria mediante \textbf{Greedy Decoding}, assumendo che non vi siano pareggi nella scelta dei token e che la generazione inizi dallo stesso prompt.
+
+Non garantisce invece la riproduzione della canaria mediante campionamento probabilistico, poiché il modello potrebbe selezionare token differenti da quelli più probabili.
+\end{observation}
