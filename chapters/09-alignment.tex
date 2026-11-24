@@ -83,6 +83,16 @@ I due approcci rispondono a obiettivi diversi, ma vengono
 comunemente utilizzati insieme.
 
 
+\begin{observation}
+    \textbf{Fine-Tuning.} È un processo di addestramento in cui si
+    aggiornano i pesi di un modello già pre-addestrato, con l'obiettivo
+    di adattarlo a un determinato compito o comportamento.
+
+    \medskip
+    \noindent\textbf{Alignment.} È il processo con cui si cerca di
+    rendere il comportamento di un LLM coerente con determinati
+    obiettivi, preferenze, valori o istruzioni umane.
+\end{observation}
 
 \newpage
 \subsection{Panoramica dell'Alignment degli LLM}
@@ -1881,522 +1891,538 @@ il costo computazionale e la latenza complessiva.
 \newpage
 
 \subsection{Human Preference Alignment: RLHF}
+Finora, in questo capitolo, ci siamo concentrati sul fine-tuning degli LLM utilizzando dati etichettati costituiti da coppie input-output. Questo approccio ci consente di adattare gli LLM a seguire le istruzioni (instruction-following) attraverso l'apprendimento supervisionato.
 
-\paragraph{Obiettivo.}
-Seguire un'istruzione non garantisce
-che la risposta sia coerente
-con valori e preferenze umane.
+In molte applicazioni, tuttavia, agli LLM non viene richiesto soltanto di seguire le istruzioni, ma anche di comportarsi in modo maggiormente allineato ai valori e alle preferenze umane.
 
-Il libro propone l'esempio di una richiesta
-relativa all'intrusione in un sistema informatico:
-un modello che esegue letteralmente
-la richiesta potrebbe produrre
-una risposta indesiderata.
-Un comportamento più appropriato
-può richiedere di scoraggiare l'attività
-e illustrarne le conseguenze.
+Consideriamo uno scenario in cui un utente chiede a un LLM come violare un sistema informatico. Se l'LLM non è opportunamente allineato, potrebbe rispondere fornendo dettagli su come svolgere questa attività illegale. Una risposta più desiderabile, invece, potrebbe consigliare all'utente di non intraprendere attività illegali e fornire una panoramica generale delle conseguenze di tali azioni.
 
-Il problema è che tali valutazioni
-dipendono dal contesto e da sfumature
-difficili da esprimere completamente
-mediante esempi supervisionati.
-Talvolta le persone stesse non riescono
-a formalizzare con precisione
-le proprie preferenze.
+La difficoltà nel raggiungere questo obiettivo consiste nel fatto che le sfumature etiche e le considerazioni contestuali, necessarie affinché un LLM risponda in modo appropriato in questi scenari, non sono sempre facili da codificare all'interno di un dataset di fine-tuning.
 
-\begin{definition}{Reinforcement Learning from Human Feedback}
-Il Reinforcement Learning from Human Feedback
-(RLHF) è un approccio nel quale le preferenze
-umane sugli output vengono utilizzate
-per addestrare un Reward Model,
-che fornisce successivamente il segnale
-di valutazione per ottimizzare l'LLM
-mediante Reinforcement Learning.
-\end{definition}
+Un aspetto ancora più problematico è che, spesso, gli esseri umani stessi non sono in grado di esprimere con precisione le proprie preferenze.
 
-La procedura generale è:
+In questa sezione discutiamo un \textbf{metodo alternativo di fine-tuning degli LLM}, chiamato Reinforcement Learning from Human Feedback (apprendimento per rinforzo mediante feedback umano), abbreviato in RLHF [Christiano et al., 2017; Stiennon et al., 2020].
+
+\begin{warning}{}
+    Ricordarti che L'Human Preference Alignment significa allineare il comportamento del modello alle preferenze e etica umana, e un metodo per farlo è tramite RLHF.
+\end{warning}
+
+L'idea \textbf{alla base del RLHF} è la seguente:
 
 \begin{enumerate}
-    \item generare più risposte per una stessa richiesta;
+    \item \textbf{Raccolta delle preferenze umane.}
 
-    \item raccogliere preferenze umane sulle risposte;
+    Prima di tutto, vengono reclutati dei valutatori umani,
+    eventualmente esperti, che esprimono la propria preferenza
+    tra coppie di output $y_1$ e $y_2$ generati da un LLM,
+    dato uno stesso input $x$.
 
-    \item addestrare un Reward Model
-    a prevedere tali preferenze;
+    \item \textbf{Addestramento del Reward Model.}
 
-    \item utilizzare i punteggi del Reward Model
-    per aggiornare il modello linguistico.
+    Quindi attraverso la raccolta delle preferenze umane viene
+    costruito un dataset:
+    \[
+        \mathcal D_{\mathrm{pref}}
+        =
+        \{(x_i,y_i^+,y_i^-)\}_{i=1}^{N}
+    \]
+    dove:
+    \begin{itemize}
+        \item $x_i$ è l'input fornito all'LLM;
+        \item $y_i^+$ è la risposta preferita dal
+        valutatore umano;
+        \item $y_i^-$ è la risposta non preferita dal
+        valutatore umano.
+    \end{itemize}
+
+    Osserva che la risposta $y_i^-$ non è necessariamente
+    errata, ma è semplicemente meno preferita rispetto
+    alla risposta $y_i^+$.
+
+    Una volta raccolte le preferenze umane, queste vengono
+    utilizzate per addestrare un \textbf{Reward Model}.
+
+    Il Reward Model è un modello che ha il compito di
+    prevedere \textbf{la qualità percepita di una risposta
+    generata dall'LLM}, sulla base delle preferenze umane
+    apprese durante l'addestramento.
+
+    Possiamo rappresentarlo come:
+    \[
+        r_\phi(x,y)
+    \]
+    dove:
+    \begin{itemize}
+        \item $x$ è l'input fornito all'LLM;
+        \item $y$ è una risposta generata dall'LLM;
+        \item $\phi$ rappresenta i parametri del Reward Model;
+        \item $r_\phi(x,y)$ è un punteggio numerico
+        assegnato dal Reward Model alla risposta $y$,
+        dato l'input $x$.
+    \end{itemize}
+
+    Si tratta quindi di un modello addestrato utilizzando
+    le preferenze umane, che successivamente cerca di
+    prevedere autonomamente tali preferenze.
+
+    Questo è molto utile perché permette di assegnare
+    punteggi anche a nuove risposte, senza richiedere
+    ogni volta l'intervento di un valutatore umano.
+
+    \item \textbf{Fine-tuning dell'LLM tramite
+    Reinforcement Learning.}
+
+    Una volta ottenuti un LLM in grado di generare risposte
+    e un Reward Model addestrato a valutarle, possiamo
+    considerare un ulteriore dataset costituito
+    esclusivamente da input:
+    \[
+        \mathcal D_{\mathrm{RL}}
+        =
+        \{x_i\}_{i=1}^{M}
+    \]
+
+    Gli input di questo dataset non devono necessariamente
+    essere differenti da quelli utilizzati per addestrare
+    il Reward Model.
+
+    Per ogni input $x_i$ fornito all'LLM, quest'ultimo
+    può generare, tramite sampling, una o più risposte:
+    \[
+        y_{i,1},y_{i,2},\ldots,y_{i,K},
+        \qquad K \geq 1.
+    \]
+
+    Ciascuna di queste risposte viene
+    \textbf{valutata dal Reward Model}, ottenendo
+    i rispettivi punteggi:
+    \[
+        r_\phi(x_i,y_{i,1}),
+        \ldots,
+        r_\phi(x_i,y_{i,K}).
+    \]
+
+    Un algoritmo di Reinforcement Learning utilizza
+    questi punteggi per aggiornare i parametri $\theta$
+    dell'LLM, con l'obiettivo di favorire la generazione
+    di risposte associate a reward più elevati.
+
+    Durante questa fase, i parametri $\phi$ del Reward
+    Model vengono generalmente mantenuti fissati,
+    mentre vengono aggiornati i parametri $\theta$
+    dell'LLM.
+
+    Le risposte possono essere generate dinamicamente
+    durante il fine-tuning, poiché, a seguito
+    dell'aggiornamento dei parametri dell'LLM, cambia
+    anche la sua distribuzione di probabilità.
 \end{enumerate}
 
-La differenza centrale rispetto a SFT
-è che il modello viene guidato
-da una valutazione delle risposte generate,
-anziché soltanto dall'imitazione
-di una risposta annotata.
+\begin{observation}
+    A differenza del Supervised Fine-Tuning, durante
+    la fase di Reinforcement Learning del RLHF non
+    è necessario disporre di risposte ground truth
+    associate agli input del dataset
+    $\mathcal D_{\mathrm{RL}}$.
 
-\begin{figure}[h]
-    \centering
-    \IfFileExists{placeholder_figura_4_6.pdf}{
-        \includegraphics[width=0.8\textwidth]{placeholder_figura_4_6}
-    }{
-        \fbox{\parbox{0.8\textwidth}{
-            \centering
-            \vspace{1cm}
-            Segnaposto della figura 4.6
-            \vspace{1cm}
-        }}
-    }
-    \caption{Confronto fra SFT e RLHF.
-    In SFT si massimizza la probabilità
-    di una risposta annotata, confrontando
-    le distribuzioni predette con i token attesi.
-    In RLHF si generano risposte candidate,
-    si raccolgono confronti umani e si addestra
-    un Reward Model che guida il successivo
-    Fine-tuning mediante Reinforcement Learning.}
-    \label{fig:sft-vs-rlhf}
-\end{figure}
+    Infatti, è l'LLM stesso a generare le risposte
+    durante l'addestramento, mentre il Reward Model
+    fornisce il segnale di apprendimento necessario
+    per guidare l'aggiornamento dei parametri
+    dell'LLM tramite un algoritmo di Reinforcement
+    Learning.
+\end{observation}
+
+\newpage
 
 \subsubsection{Fondamenti di Reinforcement Learning: punti principali}
 
-Il Reinforcement Learning descrive
-l'interazione fra un \textbf{Agent}
-e un \textbf{Environment}.
+Un framework generale di Reinforcement Learning descrive il modo in cui un agente interagisce con un dynamic environment.
 
-A ogni passo, l'Agent osserva uno stato,
-sceglie un'azione secondo una Policy
-e riceve un reward e un nuovo stato.
-L'obiettivo è apprendere una Policy
-che massimizzi il reward cumulativo atteso.
+Questa interazione (con il dynamic environment) viene modellata come una sequenza di azioni intraprese dall'agente in risposta allo stato dell'ambiente.
 
-Nel caso della generazione linguistica:
+A ogni istante temporale, l'agente osserva lo stato corrente, sceglie un'azione sulla base della propria politica (policy), esegue l'azione e successivamente riceve un feedback dall'ambiente sotto forma di una ricompensa (reward) e di un nuovo stato.
+
+Questa sequenza di osservazione, azione e ricezione del feedback viene ripetuta fino a quando l'agente non raggiunge il proprio obiettivo.
+
+Un sistema di Reinforcement Learning è costituito da diverse componenti:
 
 \begin{itemize}
-    \item l'\textbf{Agent} è l'LLM;
+    \item \textbf{Agente (Agent).} 
+    È l'entità che apprende e prende decisioni nel Reinforcement 
+    Learning. Nel contesto degli LLM, l'agente può essere 
+    considerato come l'LLM stesso.
 
-    \item l'\textbf{Environment} è il contesto
-    nel quale il modello genera output
-    e riceve feedback;
+    \item \textbf{Ambiente (Environment).} 
+    Comprende tutto ciò che è esterno all'agente e con cui 
+    quest'ultimo interagisce.
+    Tuttavia, nel contesto degli LLM, l'ambiente non è tanto 
+    uno spazio fisico o virtuale, quanto piuttosto il framework 
+    all'interno del quale l'agente (ad esempio, un LLM) 
+    riceve feedback e apprende.
 
-    \item lo \textbf{State} $s_t$ è il contesto
-    disponibile al passo $t$,
-    cioè l'input $x$ e i token già generati $y_{<t}$;
-
-    \item l'\textbf{Action} $a_t$ è il token $y_t$
-    scelto al passo corrente;
-
-    \item il \textbf{Reward} $r_t$ valuta
-    l'azione o la risposta prodotta;
-
-    \item la \textbf{Policy} $\pi$ è la distribuzione
-    di probabilità sui token successivi.
-\end{itemize}
-
-La corrispondenza fondamentale è
-\[
-\pi(a\mid s)
-=
-\Pr(y_t\mid x,y_{<t}).
-\tag{4.14}
-\]
-
-Una \textbf{trajectory} $\tau$ è una sequenza
-di stati e azioni.
-Il return è il reward cumulativo lungo tale sequenza.
-
-Il testo introduce due funzioni:
-
-\begin{itemize}
-    \item $V(s)$, che valuta il return atteso
-    partendo dallo stato $s$
-    e seguendo la Policy;
-
-    \item $Q(s,a)$, che valuta il return atteso
-    partendo da $s$, scegliendo inizialmente $a$
-    e seguendo poi la Policy.
-\end{itemize}
-
-Un discount factor $\gamma\in[0,1]$
-regola il peso attribuito ai reward futuri.
-
-\paragraph{Reward sparsi.}
-Nel contesto considerato,
-il reward viene tipicamente assegnato
-alla risposta completa:
-\[
-r_t=0 \quad \text{per }t<T,
-\]
-mentre il reward effettivo compare
-al termine della generazione.
-
-Il feedback è quindi \textbf{sparse},
-anziché disponibile a ogni passo.
-
-\paragraph{Policy gradient e baseline.}
-I metodi di Policy Gradient aggiornano la Policy
-in una direzione che aumenta
-il return atteso.
-Non richiedono che la funzione di reward
-sia differenziabile.
-
-Una difficoltà è l'elevata varianza
-delle stime del gradiente.
-Per renderle più stabili
-si può sottrarre una \textbf{baseline},
-che costituisce un riferimento
-per valutare il risultato ottenuto.
-
-Il beneficio riguarda la varianza
-della stima del gradiente:
-sottrarre una costante ai reward
-non riduce, di per sé,
-la loro varianza.
-
-\paragraph{Advantage e Actor-Critic.}
-
-\begin{definition}{Advantage}
-L'Advantage misura quanto un'azione sia vantaggiosa
-rispetto al valore atteso dello stato
-dal quale viene eseguita:
-\[
-A(s_t,a_t)
-=
-Q(s_t,a_t)-V(s_t).
-\tag{4.29}
-\]
-\end{definition}
-
-Nell'\textbf{Advantage Actor-Critic (A2C)}:
-
-\begin{itemize}
-    \item l'\textbf{Actor} apprende la Policy;
-
-    \item il \textbf{Critic} apprende la Value Function
-    e contribuisce alla stima dell'Advantage.
-\end{itemize}
-
-Il testo utilizza il
-\textbf{Temporal Difference error (TD error)}
-per stimare l'Advantage:
-\[
-A(s_t,a_t)
-\approx
-r_t+\gamma V(s_{t+1})-V(s_t).
-\]
-
-Questa espressione viene scritta nel libro
-come uguaglianza nella formula (4.31);
-qui il simbolo di approssimazione
-ne rende esplicito il ruolo di stima.
-
-\paragraph{Esempio pratico: significato dell'Advantage.}
-Se una scelta produce un risultato migliore
-di quello atteso dal Critic,
-l'Advantage è positivo e l'aggiornamento
-favorisce quella scelta.
-
-Se il risultato è peggiore del previsto,
-l'Advantage è negativo e la scelta
-viene sfavorita.
-
-\begin{figure}[h]
-    \centering
-    \IfFileExists{placeholder_figura_4_7.pdf}{
-        \includegraphics[width=0.8\textwidth]{placeholder_figura_4_7}
-    }{
-        \fbox{\parbox{0.8\textwidth}{
-            \centering
-            \vspace{1cm}
-            Segnaposto della figura 4.7
-            \vspace{1cm}
-        }}
-    }
-    \caption{Interpretazione di un LLM come Policy.
-    Il contesto formato dall'input e dai token precedenti
-    costituisce lo stato; il token successivo
-    costituisce l'azione.
-    Reward e Value Function forniscono il feedback
-    necessario a guidare l'apprendimento della Policy.
-    La figura collega la generazione autoregressiva
-    al linguaggio del Reinforcement Learning.}
-    \label{fig:llm-policy}
-\end{figure}
-
-\subsubsection{Addestramento del Reward Model: punti principali}
-
-Il Reward Model associa un punteggio scalare
-a una coppia input--output:
-\[
-r=\operatorname{Reward}(x,y).
-\tag{4.33}
-\]
-
-Il punteggio esprime quanto la risposta $y$
-sia coerente con il comportamento desiderato
-per l'input $x$.
-
-\paragraph{Architettura.}
-Una soluzione descritta dal testo consiste
-nell'utilizzare un Transformer decoder
-pre-addestrato:
-
-\begin{enumerate}
-    \item si concatena $[x,y]$;
-
-    \item si estrae dall'ultimo layer
-    la rappresentazione dell'ultima posizione,
-    $\mathbf{h}_{\mathrm{last}}$;
-
-    \item una trasformazione lineare produce
-    il reward:
+    \item \textbf{Stato (State) ($s$).} 
+    Uno stato rappresenta la situazione corrente dell'ambiente.
+    Data una sequenza di token in un problema di Language Modeling, 
+    lo stato a un determinato istante temporale può essere visto 
+    come l'insieme dei token osservati fino a quel momento, 
+    ovvero i token di contesto utilizzati per predire il token 
+    successivo.
+    Ad esempio, possiamo definire:
     \[
-    r(x,y)
-    =
-    \mathbf{h}_{\mathrm{last}}\mathbf{W}_{r}.
-    \tag{4.34}
+        s_t = (x,y_{<t})
     \]
-\end{enumerate}
+    come lo stato utilizzato per predire il token successivo 
+    all'istante temporale $t$.
 
-La rappresentazione ha dimensione $d$
-e $\mathbf{W}_{r}$ ha dimensione $d\times 1$.
+    \item \textbf{Azione (Action) ($a$).} 
+    Le azioni rappresentano le possibili decisioni che l'agente 
+    può prendere.
+    Nel contesto degli LLM, possiamo considerarle come i 
+    possibili token del vocabolario che il modello può predire.
+    Quindi ad una azione può essere mappato un token preso.
 
-Nel caso di reward sparsi,
-la valutazione significativa viene assegnata
-alla fine della risposta completa.
+    \item \textbf{Ricompensa (Reward) ($R$).} 
+    La ricompensa rappresenta il feedback fornito dall'ambiente, 
+    che valuta il successo di un'azione.
 
-\begin{figure}[h]
-    \centering
-    \IfFileExists{placeholder_figura_4_8.pdf}{
-        \includegraphics[width=0.8\textwidth]{placeholder_figura_4_8}
-    }{
-        \fbox{\parbox{0.8\textwidth}{
-            \centering
-            \vspace{1cm}
-            Segnaposto della figura 4.8
-            \vspace{1cm}
-        }}
-    }
-    \caption{Architettura del Reward Model
-    basato su Transformer decoder.
-    L'input e la risposta vengono concatenati;
-    la rappresentazione dell'ultima posizione,
-    corrispondente al token finale,
-    viene trasformata linearmente
-    in un reward scalare.
-    La figura mostra come adattare
-    un modello linguistico a una funzione di scoring.}
-    \label{fig:reward-model}
-\end{figure}
+    Ad esempio, $r(s,a,s')$ indica la ricompensa ricevuta 
+    dall'agente per aver eseguito l'azione $a$ nello stato $s$ 
+    ed essere passato allo stato successivo $s'$.
 
-\paragraph{Raccolta delle preferenze.}
-Per ogni input si generano più risposte candidate.
-Il feedback umano può assumere la forma di:
+    Se è nota la sequenza di stati e azioni, possiamo indicare 
+    la ricompensa ricevuta all'istante temporale $t$ come:
+    \[
+        r_t = r(s_t,a_t,s_{t+1}).
+    \]
 
+    Si osservi inoltre che, se il processo decisionale è 
+    deterministico, possiamo omettere $s_{t+1}$, poiché 
+    quest'ultimo può essere determinato univocamente a partire 
+    da $s_t$ e $a_t$.
+
+    In questi casi, possiamo utilizzare:
+    \[
+        r(s_t,a_t)
+    \]
+    come notazione abbreviata di $r(s_t,a_t,s_{t+1})$.
+
+    \item \textbf{Politica (Policy) ($\pi$).}
+Nel contesto di un LLM, una politica è una funzione che associa
+a ogni possibile stato $s$ una distribuzione di probabilità
+sull'insieme delle possibili azioni, che nel caso degli LLM
+corrispondono ai token del vocabolario $\mathcal{V}$. (\textbf{La devi pensare come una funzione, che può prendere ogni possibile stato $s_1,\dots,s_t$ e restituisce una distribuzione di probabilità sui token (azioni)})
+
+Dato uno stato $s_t=(x,y_{<t})$, possiamo rappresentare
+\textbf{l'intera distribuzione di probabilità sulle possibili azioni}
+come:
+\[
+    \pi_\theta(\cdot \mid s_t)
+    = P_\theta(\cdot \mid x,y_{<t}).
+\]
+
+Se invece vogliamo considerare la probabilità associata a
+una \textbf{specifica azione} $a_t$, ovvero la probabilità
+di generare uno specifico token $y_t$, possiamo scrivere:
+\[
+    \pi_\theta(a_t \mid s_t)
+    = P_\theta(y_t \mid x,y_{<t}).
+\]
+
+Dove:
 \begin{itemize}
-    \item \textbf{Pairwise Comparison}:
-    scelta della risposta migliore fra due;
-
-    \item \textbf{Rating}:
-    assegnazione di un punteggio
-    continuo, discreto o binario;
-
-    \item \textbf{Listwise Ranking}:
-    ordinamento di un insieme di risposte.
+    \item $\theta$ rappresenta l'insieme dei parametri dell'LLM;
+    \item $s_t=(x,y_{<t})$ rappresenta lo stato corrente,
+    costituito dal prompt $x$ e dai token precedentemente generati;
+    \item $a_t=y_t$ rappresenta l'azione considerata,
+    ovvero il token da generare.
 \end{itemize}
 
-Il testo si concentra sui confronti a coppie.
-La notazione
+\textbf{Seguire una politica stocastica $\pi_\theta$} significa
+che, a ogni istante temporale $t$, l'agente seleziona un'azione
+campionandola dalla distribuzione di probabilità associata
+allo stato corrente:
 \[
-y_a\succ y_b
-\]
-indica che $y_a$ è preferita a $y_b$.
-
-\paragraph{Modello di Bradley--Terry.}
-La probabilità di preferire $y_a$
-viene modellata come
-\[
-\begin{aligned}
-\Pr(y_a\succ y_b\mid x)
-&=
-\frac{e^{r(x,y_a)}}
-{e^{r(x,y_a)}+e^{r(x,y_b)}}\\
-&=
-\operatorname{Sigmoid}
-\bigl(r(x,y_a)-r(x,y_b)\bigr).
-\end{aligned}
-\tag{4.35}
+    a_t \sim \pi_\theta(\cdot \mid s_t).
 \]
 
-Conta quindi la differenza fra i punteggi:
-una differenza maggiore a favore di $y_a$
-produce una probabilità di preferenza più alta.
-
-Il Reward Model viene addestrato
-minimizzando la negative log-likelihood
-delle preferenze annotate:
+Nel contesto degli LLM, ciò equivale a campionare il token
+successivo dalla distribuzione di probabilità prodotta dal modello:
 \[
-L_r(\phi)
-=
--
-\mathbb{E}_{(x,y_a,y_b)\sim D_r}
-\left[
-\log \Pr_{\phi}(y_a\succ y_b\mid x)
-\right].
-\tag{4.36}
+    y_t \sim P_\theta(\cdot \mid x,y_{<t}).
 \]
 
-Qui $D_r$ è il dataset di preferenze
-e $\phi$ comprende i parametri
-del Transformer e della trasformazione lineare.
-
-Dopo l'addestramento, il modello assegna
-punteggi alle singole coppie $(x,y)$:
-non è necessario presentargli sempre
-due risposte contemporaneamente.
-
-\subsubsection{Addestramento dell'LLM: punti principali}
-
-Il Reward Model addestrato viene utilizzato
-per ottimizzare la Policy.
-
-In questa fase è sufficiente disporre
-di un dataset di input:
-le risposte vengono generate dal modello
-e valutate tramite il Reward Model.
-
-La procedura Actor-Critic utilizza
-i reward e le stime del Critic
-per favorire le scelte con Advantage positivo
-e sfavorire quelle con Advantage negativo.
-
-\paragraph{Importance sampling.}
-Il testo introduce un confronto
-fra la Policy corrente $\pi_{\theta}$
-e una Policy di riferimento
-$\pi_{\theta_{\mathrm{ref}}}$,
-attraverso il rapporto
+Una volta selezionato il token $y_t$, lo stato viene aggiornato:
 \[
-\frac{\pi_{\theta}(a_t\mid s_t)}
-{\pi_{\theta_{\mathrm{ref}}}(a_t\mid s_t)}.
+    s_{t+1}=(x,y_{\leq t}).
 \]
 
-Questo rapporto permette di pesare le azioni
-in base a quanto siano probabili
-nella Policy corrente rispetto a quella
-utilizzata come riferimento.
+Il processo viene quindi ripetuto, applicando la stessa politica
+al nuovo stato.
 
-Se il rapporto è maggiore di uno,
-l'azione è diventata più probabile;
-se è minore di uno,
-è diventata meno probabile.
+    
 
-\paragraph{PPO e stabilità degli aggiornamenti.}
-La \textbf{Proximal Policy Optimization (PPO)}
-mira a migliorare la Policy
-evitando aggiornamenti eccessivi.
+    \item \textbf{Funzione di valore (Value Function) ($V$ e $Q$).}
 
-Ad alto livello, il procedimento combina:
+    \begin{definition}{Traiettoria}
+        Una \textbf{traiettoria (trajectory)} $\tau$ è una sequenza
+        ordinata di stati e azioni che descrive l'evoluzione
+        dell'interazione tra un agente e l'ambiente nel tempo:
+        \[
+        \tau = (s_0,a_0,s_1,a_1,\ldots,s_{T-1},a_{T-1}).
+        \]
+        Ricordarti che anche se adotto la stessa politica, la traiettoria può essere diversa, perchè la politica è stocastica.
+    \end{definition}
 
-\begin{itemize}
-    \item il rapporto fra Policy corrente
-    e Policy di riferimento;
+    Una \textbf{funzione di valore dello stato (State-Value Function)}, 
+    o semplicemente funzione di valore, valuta il ritorno 
+    scontato atteso (ovvero le ricompense accumulate e scontate) 
+    di un agente che parte da un \textbf{determinato stato $s$, che è lo stato di partenza} e segue 
+    una specifica politica $\pi$.
 
-    \item l'Advantage delle azioni;
+    Essa è definita come:
+    \begin{align*}
+        V(s)
+        &= \mathbb{E}\left[
+            r(s_0,a_0,s_1)
+            + \gamma r(s_1,a_1,s_2)
+            + \gamma^2 r(s_2,a_2,s_3)
+            + \cdots
+            \mid s_0=s,\pi
+        \right] \\
+        &= \mathbb{E}\left[
+            r_0+\gamma r_1+\gamma^2r_2+\cdots
+            \mid s_0=s,\pi
+        \right] \\
+        &= \mathbb{E}\left[
+            \sum_{t=0}^{\infty}\gamma^t r_t
+            \mid s_0=s,\pi
+        \right].
+    \end{align*}
+    La \textbf{State-Value Function} $V(s)$ valuta il ritorno
+scontato medio associato a tutte le possibili traiettorie
+che si possono ottenere partendo dallo stesso stato iniziale
+$s$ e seguendo la stessa politica $\pi$.
 
-    \item un meccanismo di \textbf{clipping}
-    per contenere gli effetti
-    di variazioni troppo ampie;
+Si tratta di una media pesata, in cui il peso associato
+a ciascuna traiettoria è la probabilità di ottenere tale
+traiettoria partendo dallo stato $s$ e seguendo la politica $\pi$.
+\\
+    Dove:
+    \begin{itemize}
+        \item $\gamma \in [0,1]$ è il 
+        \textbf{fattore di sconto (Discount Factor)}, 
+        che regola l'importanza attribuita alle ricompense future;
 
-    \item una penalizzazione dello scostamento
-    dalla Policy di riferimento.
+        \item $s_0=s$ indica che l'agente parte dallo stato $s$;
+
+        \item $\pi$ è la politica seguita dall'agente;
+
+        \item $\mathbb{E}$ indica il valore atteso, calcolato 
+        rispetto a tutte le possibili traiettorie, ovvero 
+        tutte le possibili sequenze di stati e azioni.
+    \end{itemize}
+    \begin{example}{Calcolo della State-Value Function}
+    Supponiamo che, partendo dallo stesso stato iniziale $s$
+    e seguendo la stessa politica stocastica $\pi$, si possano
+    ottenere tre differenti traiettorie, ciascuna caratterizzata
+    da una probabilità e da un ritorno scontato.
+
+    \begin{center}
+        \begin{tabular}{c|c|c}
+            \hline
+            \textbf{Traiettoria} & \textbf{Probabilità} &
+            \textbf{Ritorno scontato} \\
+            \hline
+            $\tau_1$ & $0.5$ & $10$ \\
+            $\tau_2$ & $0.3$ & $6$  \\
+            $\tau_3$ & $0.2$ & $2$  \\
+            \hline
+        \end{tabular}
+    \end{center}
+
+    Indichiamo con $G(\tau_i)$ il ritorno scontato associato
+    alla traiettoria $\tau_i$, ovvero:
+    \[
+        G(\tau_i)=\sum_{t=0}^{\infty}\gamma^t r_t^{(i)},
+    \]
+    dove $r_t^{(i)}$ rappresenta la ricompensa ricevuta
+    all'istante temporale $t$ lungo la traiettoria $\tau_i$.
+
+    La funzione di valore sarà quindi:
+    \begin{align*}
+        V(s)
+        &= \mathbb{E}[\sum_{t=0}^{\infty}\gamma^t r_t \mid s_0=s,\pi] \\
+        &= \sum_{i=1}^{3}
+        P(\tau_i\mid s_0=s, \pi)G(\tau_i) \\
+        &= 0.5 \cdot 10 + 0.3 \cdot 6 + 0.2 \cdot 2 \\
+        &= 5+1.8+0.4 \\
+        &= 7.2.
+    \end{align*}
+
+    Osserva che, nonostante lo stato iniziale $s$ e la politica
+    $\pi$ siano gli stessi, possiamo ottenere traiettorie
+    differenti a causa della natura stocastica della politica.
+
+    La funzione di valore rappresenta dunque una
+    \textbf{media pesata dei ritorni scontati associati alle
+    possibili traiettorie}, dove i pesi sono le probabilità
+    di ottenere ciascuna traiettoria partendo dallo stato
+    $s$ e seguendo la politica $\pi$.
+\end{example}
+    \begin{itemize}
+    \item \textbf{Q-value function.}
+    Misura il ritorno atteso a partire da uno stato $s$,
+    eseguendo inizialmente un'azione $a$ e seguendo
+    successivamente una politica $\pi$.
+
+    Formalmente:
+    \[
+    Q(s)
+    =
+    \mathbb{E}\left[
+        \sum_{t=0}^{\infty}\gamma^t r_t
+        \;\middle|\;
+        s_0=s,\;a_0=a,\;\pi
+    \right]
+    \]
+
+    dove $a_0=a$ indica che l'azione eseguita
+    nello stato iniziale $s$ è proprio $a$.
+\end{itemize}
 \end{itemize}
 
-La logica delle \textbf{trust region}
-è mantenere gli aggiornamenti
-in una zona nella quale l'ottimizzazione
-resti sufficientemente stabile.
+\newpage
 
-\paragraph{I quattro modelli coinvolti.}
-La configurazione descritta richiede
-quattro componenti basati sul Transformer decoder:
+L'obiettivo del Reinforcement Learning è apprendere una politica
+che massimizzi la \textbf{ricompensa cumulativa (Cumulative Reward
+o Return)} che l'agente riceve nel lungo periodo.
 
-\begin{enumerate}
-    \item \textbf{Reward Model} $r_{\phi}$:
-    apprende dalle preferenze umane
-    e valuta le coppie input--output.
+Data una sequenza di stati e azioni (traiettoria)
+\[
+    \tau = \{s_0,a_0,\ldots,s_{T-1},a_{T-1},s_T\},
+\]
+\begin{warning}{}
+    Nota che è diversa dalla definizione di prima, abbiamo aggiunto $s_T$ cosi 
+    possiamo calcolare anche $r_{T-1}$ nella sommatoria.
+\end{warning}
+la ricompensa cumulativa associata a tale traiettoria può essere
+espressa come:
+\[
+    R(s_0,a_0,\ldots,s_{T-1},a_{T-1},s_T)=\sum_{t=0}^{T-1}r(s_t,a_t,s_{t+1}).
+\]
 
-    \item \textbf{Value Model} $V_{\omega}$:
-    stima il return atteso a partire
-    dallo stato corrente.
+\[
+    R(\tau)=\sum_{t=1}^{T}r_t.
+\]
 
-    \item \textbf{Reference Model}
-    $\pi_{\theta_{\mathrm{ref}}}$:
-    fornisce la Policy di riferimento
-    per il campionamento e per il calcolo
-    dell'obiettivo di addestramento.
-    Nella procedura descritta viene mantenuto fisso.
+Il valore atteso della ricompensa cumulativa, calcolato
+rispetto allo spazio $\mathcal{D}$ delle possibili traiettorie
+(sequenze di stati e azioni), è definito come:
+\begin{align*}
+    J(\theta)
+    &= \underset{\tau\sim\mathcal{D}}{\mathbb{E}}
+    \left[R(\tau)\mid\pi_\theta\right] \\
+    &= \sum_{\tau\in\mathcal{D}}
+    \Pr(\tau \mid \pi_\theta )R(\tau) \\
+    &= \sum_{\tau\in\mathcal{D}}
+    \Pr(\tau \mid \pi_\theta)\sum_{t=1}^{T}r_t.
+\end{align*}
+La funzione $J(\theta)$ rappresenta il valore atteso delle 
+ricompense cumulative associate alle possibili traiettorie 
+che si possono ottenere seguendo la politica $\pi_\theta$, 
+parametrizzata da $\theta$.
 
-    \item \textbf{Target Model o Policy}
-    $\pi_{\theta}$:
-    è l'LLM che viene effettivamente
-    ottimizzato mediante RLHF.
-\end{enumerate}
+L'obiettivo del Reinforcement Learning consiste quindi nel 
+determinare i parametri $\tilde{\theta}$ della politica 
+che massimizzano tale valore atteso, ovvero:
+\[
+    \tilde{\theta} = \arg\max_{\theta} J(\theta).
+\]
 
-\paragraph{Ordine delle operazioni.}
-La sequenza operativa presentata dal libro è:
+\textbf{In altre parole, modificando i parametri $\theta$, modifichiamo
+la politica $\pi_\theta$ e, di conseguenza, le probabilità
+di ottenere le diverse traiettorie.}
 
-\begin{enumerate}
-    \item inizializzare i modelli:
-    Reward Model e Value Model possono derivare
-    da un LLM pre-addestrato;
-    Reference Model e Policy possono derivare
-    da un modello già adattato mediante SFT;
+L'obiettivo è dunque trovare una \textbf{politica che favorisca
+le traiettorie che hanno ricompense cumulative elevate}.
 
-    \item raccogliere dati di preferenza umana
-    e addestrare il Reward Model;
+\begin{observation}{}
+    Si osservi che le possibili traiettorie appartengono
+    a uno spazio $\mathcal{D}$, di cui il testo non specifica
+    esplicitamente le modalità di costruzione.
 
-    \item utilizzare il Reward Model addestrato
-    per ottimizzare congiuntamente
-    Value Model e Policy;
+    In linea generale, è possibile considerare un sottoinsieme
+    di traiettorie selezionate o generate artificialmente,
+    al fine di orientare il processo di addestramento verso
+    determinati comportamenti dell'agente.
 
-    \item aggiornare il Value Model
-    minimizzando una Mean Squared Error
-    fra il target di valore
-    e il valore predetto;
+    In questo modo, si introduce un \textbf{bias nel processo
+    di addestramento}, poiché non vengono considerate tutte
+    le possibili traiettorie, ma soltanto quelle appartenenti
+    al sottoinsieme selezionato.
+\end{observation}
 
-    \item aggiornare la Policy
-    mediante l'obiettivo PPO.
-\end{enumerate}
+Si osservi che, in molti problemi di Natural Language Processing
+(NLP), come la traduzione automatica (Machine Translation),
+le ricompense sono tipicamente sparse (\textbf{Sparse Rewards}).
 
-Reward Model e Value Model svolgono ruoli distinti:
-il primo attribuisce una valutazione alla risposta;
-il secondo stima il return atteso
-da uno stato della generazione.
+Ad esempio, una ricompensa viene ricevuta soltanto al termine
+della generazione di una frase completa. Ciò significa che:
+\[
+    r_t=0 \quad \forall t<T,
+\]
+mentre la ricompensa $r_t$ può assumere un valore diverso
+da zero soltanto quando $t=T$.
 
-\begin{figure}[h]
-    \centering
-    \IfFileExists{placeholder_figura_4_9.pdf}{
-        \includegraphics[width=0.8\textwidth]{placeholder_figura_4_9}
-    }{
-        \fbox{\parbox{0.8\textwidth}{
-            \centering
-            \vspace{1cm}
-            Segnaposto della figura 4.9
-            \vspace{1cm}
-        }}
-    }
-    \caption{Schema complessivo di RLHF.
-    Nella prima fase, i dati di preferenza umana
-    addestrano il Reward Model mediante
-    un obiettivo basato sul modello di Bradley--Terry.
-    Nella seconda fase, un dataset di soli input
-    alimenta la generazione delle risposte.
-    Il Reference Model resta fisso;
-    Reward Model e Value Function contribuiscono
-    alla valutazione delle azioni.
-    La Policy viene aggiornata mediante PPO
-    e il Value Model mediante Mean Squared Error.
-    La figura chiarisce le dipendenze
-    fra le quattro componenti.}
-    \label{fig:rlhf-completo}
-\end{figure}
+Idealmente, si preferirebbe ricevere un feedback immediato
+e frequente (\textbf{Dense Rewards}), in modo da rendere
+l'addestramento della politica più semplice ed efficiente.
+
+Sebbene siano stati proposti diversi metodi per affrontare
+il problema delle ricompense sparse, come il
+\textit{Reward Shaping}, nel seguito della trattazione
+continueremo ad assumere uno scenario caratterizzato da
+ricompense sparse, in cui la ricompensa è disponibile
+soltanto al completamento della predizione.
+
+\begin{definition}{Advantage Function.}
+La funzione di vantaggio misura quanto sia conveniente
+intraprendere una specifica azione $a$ nello stato $s$,
+rispetto al comportamento medio della politica $\pi$
+nello stesso stato.
+
+Formalmente, essa è definita come:
+\[
+    A(s)=Q(s)-V(s).
+\]
+
+In particolare, essa rappresenta la differenza tra:
+\begin{itemize}
+    \item il ritorno scontato medio delle possibili traiettorie
+    che si possono ottenere partendo dallo stato $s$,
+    imponendo come prima azione $a$ e seguendo successivamente
+    la politica $\pi$;
+
+    \item il ritorno scontato medio delle possibili traiettorie
+    che si possono ottenere partendo dallo stato $s$ e seguendo
+    la politica $\pi$ fin dalla prima azione.
+\end{itemize}
+
+Possiamo quindi distinguere tre casi:
+\begin{itemize}
+    \item $A(s)>0$: intraprendere l'azione $a$ è
+    più conveniente rispetto al comportamento medio della politica;
+
+    \item $A(s)=0$: intraprendere l'azione $a$ è
+    equivalente, in termini di ritorno atteso, al comportamento
+    medio della politica;
+
+    \item $A^(s)<0$: intraprendere l'azione $a$ è
+    meno conveniente rispetto al comportamento medio della politica.
+\end{itemize}
+
+L'Advantage Function fornisce quindi un'indicazione su quali
+azioni favorire e quali sfavorire durante l'addestramento
+della politica, al fine di massimizzare il ritorno atteso.
+\end{definition}
